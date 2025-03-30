@@ -1,0 +1,10 @@
+# Virtual environment directories
+venv/
+whisper_env/
+
+# macOS specific files
+.DS_Store
+
+# Log files (as seen in README)
+*.log
+*.err 
