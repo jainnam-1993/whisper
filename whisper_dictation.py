@@ -1,9 +1,12 @@
 import argparse
 import time
 import threading
+from threading import Lock
 import pyaudio
 import numpy as np
 import rumps
+import signal
+import sys
 from pynput import keyboard
 from whisper import load_model
 import platform
@@ -34,42 +37,80 @@ class Recorder:
         self.transcriber = transcriber
         self.stream = None
         self.p = None
+        self.lock = Lock()
 
     def start(self, language=None):
-        thread = threading.Thread(target=self._record_impl, args=(language,))
-        thread.start()
+        with self.lock:
+            if not self.recording:
+                self.recording = True
+                thread = threading.Thread(target=self._record_impl, args=(language,))
+                thread.start()
 
     def stop(self):
-        self.recording = False
+        with self.lock:
+            self.recording = False
 
     def cleanup(self):
-        if self.stream is not None:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-        if self.p is not None:
-            self.p.terminate()
-            self.p = None
+        with self.lock:
+            # Stop recording if still active
+            self.recording = False
+            
+            # Cleanup PyAudio stream
+            if self.stream is not None:
+                try:
+                    if self.stream.is_active():
+                        self.stream.stop_stream()
+                    self.stream.close()
+                except Exception as e:
+                    print(f"Error closing stream: {e}")
+                finally:
+                    self.stream = None
+                    
+            # Cleanup PyAudio instance
+            if self.p is not None:
+                try:
+                    self.p.terminate()
+                except Exception as e:
+                    print(f"Error terminating PyAudio: {e}")
+                finally:
+                    self.p = None
 
     def _record_impl(self, language):
+        frames = []
+        frames_per_buffer = 1024
+        
         try:
-            self.recording = True
-            frames_per_buffer = 1024
+            # Initialize PyAudio
             self.p = pyaudio.PyAudio()
+            
+            # Open audio stream
             self.stream = self.p.open(format=pyaudio.paInt16,
                             channels=1,
                             rate=16000,
                             frames_per_buffer=frames_per_buffer,
                             input=True)
-            frames = []
-
+            
+            # Record audio data while recording flag is set
             while self.recording:
-                data = self.stream.read(frames_per_buffer)
-                frames.append(data)
-
-            audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
-            audio_data_fp32 = audio_data.astype(np.float32) / 32768.0
-            self.transcriber.transcribe(audio_data_fp32, language)
+                try:
+                    data = self.stream.read(frames_per_buffer, exception_on_overflow=False)
+                    frames.append(data)
+                except IOError as e:
+                    print(f"Warning: IO error during recording: {e}")
+                except Exception as e:
+                    print(f"Error during recording: {e}")
+                    break
+            
+            # Process recorded audio if we have any frames
+            if frames:
+                try:
+                    audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
+                    audio_data_fp32 = audio_data.astype(np.float32) / 32768.0
+                    self.transcriber.transcribe(audio_data_fp32, language)
+                except Exception as e:
+                    print(f"Error processing audio data: {e}")
+        except Exception as e:
+            print(f"Error in recording implementation: {e}")
         finally:
             self.cleanup()
 
@@ -236,6 +277,26 @@ def parse_args():
     return args
 
 
+def signal_handler(sig, frame, app=None, recorder=None, listener=None):
+    """Handle termination signals to clean up resources gracefully."""
+    print(f"\nReceived signal {sig}, shutting down gracefully...")
+    
+    # Stop recording if active
+    if app and app.started:
+        app.stop_app(None)
+    
+    # Clean up recorder resources
+    if recorder:
+        recorder.cleanup()
+    
+    # Stop keyboard listener
+    if listener and listener.is_alive():
+        listener.stop()
+    
+    print("Cleanup complete. Exiting.")
+    sys.exit(0)
+
+
 if __name__ == "__main__":
     args = parse_args()
 
@@ -255,12 +316,23 @@ if __name__ == "__main__":
     listener = keyboard.Listener(on_press=key_listener.on_key_press, on_release=key_listener.on_key_release)
     listener.start()
 
-    print("Running... ")
+    # Set up signal handlers for graceful shutdown
+    # Create a partial function that includes our objects
+    def handle_signal(sig, frame):
+        signal_handler(sig, frame, app, recorder, listener)
+    
+    # Register the signal handlers
+    signal.signal(signal.SIGINT, handle_signal)  # Ctrl+C
+    signal.signal(signal.SIGTERM, handle_signal)  # Termination request
+
+    print("Running... (Press Ctrl+C to exit)")
     try:
         app.run()
     except (KeyboardInterrupt, SystemExit):
         print("Shutting down...")
     finally:
+        # These will be redundant if a signal was caught,
+        # but necessary if exiting via other means
         listener.stop()
         recorder.cleanup()
 

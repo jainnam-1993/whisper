@@ -36,21 +36,26 @@ source venv/bin/activate
 Install the required packages:
 
 ```bash
+# Option 1: Using requirements.txt
 pip install -r requirements.txt
+
+# Option 2: Install packages directly
+pip install pyaudio numpy rumps pynput
+pip install git+https://github.com/openai/whisper.git
 ```
 
 ## Usage
 Run the application:
 
 ```bash
-python whisper-dictation.py
+python whisper_dictation.py
 ```
 
 By default, the app uses the "base" Whisper ASR model and the key combination to toggle dictation is cmd+option on macOS and ctrl+alt on other platforms. You can change the model and the key combination using command-line arguments.  Note that models other than `tiny` and `base` can be slow to transcribe and are not recommended unless you're using a powerful computer, ideally one with a CUDA-enabled GPU. For example:
 
 
 ```bash
-python whisper-dictation.py -m large -k cmd_r+shift -l en
+python whisper_dictation.py -m large -k cmd_r+shift -l en
 ```
 
 The models are multilingual, and you can specify a two-letter language code (e.g., "no" for Norwegian) with the `-l` or `--language` option. Specifying the language can improve recognition accuracy, especially for smaller model sizes.
@@ -58,7 +63,7 @@ The models are multilingual, and you can specify a two-letter language code (e.g
 #### Replace macOS default dictation trigger key
 You can use this app to replace macOS built-in dictation. Trigger to begin recording with a double click of Right Command key and stop recording with a single click of Right Command key.
 ```bash
-python whisper-dictation.py -m large --k_double_cmd -l en
+python whisper_dictation.py -m large --k_double_cmd -l en
 ```
 To use this trigger, go to System Settings -> Keyboard, disable Dictation. If you double click Right Command key on any text field, macOS will ask whether you want to enable Dictation, so select Don't Ask Again.
 
@@ -146,3 +151,40 @@ Available options:
 - `--model_name`: Choose the Whisper model (tiny, base, small, medium, large)
 - `--language`: Specify the language for better recognition
 - `--max_time`: Maximum recording time in seconds (default: 30)
+
+## Recent Improvements
+
+### Resource Management
+
+The application has been improved to better manage system resources:
+
+* Enhanced cleanup of PyAudio streams to prevent resource leaks
+* Proper management of multiprocessing resources and semaphores
+* Thread synchronization using locks to prevent race conditions
+* Context managers for resources that need proper cleanup
+
+### Signal Handling
+
+The application now includes robust signal handling to ensure graceful shutdown:
+
+* Proper handling of SIGINT (Ctrl+C) and SIGTERM signals
+* Graceful cleanup of resources when the application is interrupted
+* Orderly shutdown sequence that ensures all resources are properly released
+* Prevention of segmentation faults during termination
+
+### Stability Enhancements
+
+The application has undergone extended run testing to ensure stability:
+
+* Tested for long recording sessions without resource leaks
+* Verified proper cleanup on all termination paths
+* Eliminated segmentation faults that occurred in previous versions
+* Improved error handling throughout the codebase
+
+To test the stability yourself, run the application for an extended period with various recording sessions:
+
+```bash
+python whisper_dictation.py --model_name base --max_time 120
+```
+
+Start and stop recording multiple times, then exit with Ctrl+C to verify proper cleanup.
