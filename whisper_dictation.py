@@ -32,6 +32,8 @@ class Recorder:
     def __init__(self, transcriber):
         self.recording = False
         self.transcriber = transcriber
+        self.stream = None
+        self.p = None
 
     def start(self, language=None):
         thread = threading.Thread(target=self._record_impl, args=(language,))
@@ -40,30 +42,36 @@ class Recorder:
     def stop(self):
         self.recording = False
 
+    def cleanup(self):
+        if self.stream is not None:
+            self.stream.stop_stream()
+            self.stream.close()
+            self.stream = None
+        if self.p is not None:
+            self.p.terminate()
+            self.p = None
 
     def _record_impl(self, language):
-        self.recording = True
-        frames_per_buffer = 1024
-        p = pyaudio.PyAudio()
-        stream = p.open(format=pyaudio.paInt16,
-                        channels=1,
-                        rate=16000,
-                        frames_per_buffer=frames_per_buffer,
-                        input=True)
-        frames = []
+        try:
+            self.recording = True
+            frames_per_buffer = 1024
+            self.p = pyaudio.PyAudio()
+            self.stream = self.p.open(format=pyaudio.paInt16,
+                            channels=1,
+                            rate=16000,
+                            frames_per_buffer=frames_per_buffer,
+                            input=True)
+            frames = []
 
-        while self.recording:
-            data = stream.read(frames_per_buffer)
-            frames.append(data)
+            while self.recording:
+                data = self.stream.read(frames_per_buffer)
+                frames.append(data)
 
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-
-        audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
-        audio_data_fp32 = audio_data.astype(np.float32) / 32768.0
-        self.transcriber.transcribe(audio_data_fp32, language)
-
+            audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
+            audio_data_fp32 = audio_data.astype(np.float32) / 32768.0
+            self.transcriber.transcribe(audio_data_fp32, language)
+        finally:
+            self.cleanup()
 
 class GlobalKeyListener:
     def __init__(self, app, key_combination):
@@ -248,5 +256,11 @@ if __name__ == "__main__":
     listener.start()
 
     print("Running... ")
-    app.run()
+    try:
+        app.run()
+    except (KeyboardInterrupt, SystemExit):
+        print("Shutting down...")
+    finally:
+        listener.stop()
+        recorder.cleanup()
 

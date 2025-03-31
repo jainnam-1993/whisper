@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  whisper:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: whisper-dictation
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3" 
