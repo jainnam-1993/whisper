@@ -188,3 +188,107 @@ python whisper_dictation.py --model_name base --max_time 120
 ```
 
 Start and stop recording multiple times, then exit with Ctrl+C to verify proper cleanup.
+
+# Whisper Dictation Service
+
+A robust service wrapper for running the Whisper dictation system with automatic crash recovery and system startup integration.
+
+## Features
+
+- Automatic startup on system login
+- Immediate crash recovery
+- GPU memory optimization
+- Clean process management
+- Simple control interface
+
+## Service Architecture
+
+The service consists of three main components:
+
+1. **Core Service (`whisper_service.py`)**
+   - Monitors the Whisper process health
+   - Provides immediate restart on crashes
+   - Optimizes GPU memory usage
+   - Handles process signals gracefully
+
+2. **Control Interface (`manage_whisper.py`)**
+   - Provides commands to start/stop/restart the service
+   - Shows service status
+   - Manages process lifecycle
+
+3. **Auto-startup Integration (`com.whisper.service.plist`)**
+   - Ensures service starts on system login
+   - Maintains service availability
+   - Handles logging
+
+## Auto-reload Mechanism
+
+The service implements a robust auto-reload mechanism:
+
+1. **Continuous Monitoring**
+   - Checks process status every second
+   - Detects crashes through process exit codes
+   - Identifies abnormal terminations
+
+2. **Immediate Recovery**
+   - Restarts the process immediately upon any failure
+   - No artificial delays between restarts
+   - Preserves GPU memory settings across restarts
+
+3. **Resource Management**
+   - Optimizes GPU memory allocation (512MB split size)
+   - Cleans up process resources on shutdown
+   - Maintains clean process hierarchy
+
+## Installation
+
+1. Create log directory:
+```bash
+sudo mkdir -p /var/log/whisper
+sudo chown $USER /var/log/whisper
+```
+
+2. Install the LaunchAgent:
+```bash
+# Copy the launch agent to your user's LaunchAgents directory
+cp com.whisper.service.plist ~/Library/LaunchAgents/
+
+# Load the service
+launchctl load ~/Library/LaunchAgents/com.whisper.service.plist
+```
+
+## Usage
+
+The service can be controlled using the management script:
+
+```bash
+# Start the service
+./manage_whisper.py start
+
+# Check service status
+./manage_whisper.py status
+
+# Stop the service
+./manage_whisper.py stop
+
+# Restart the service
+./manage_whisper.py restart
+```
+
+## Monitoring
+
+Logs are available at:
+- Main log: `/var/log/whisper/whisper.log`
+- Error log: `/var/log/whisper/whisper.error.log`
+
+## Troubleshooting
+
+1. If the service fails to start:
+   - Check the error log
+   - Verify Python environment
+   - Ensure correct file permissions
+
+2. If the service crashes frequently:
+   - Monitor GPU memory usage
+   - Check system resources
+   - Review error logs for patterns

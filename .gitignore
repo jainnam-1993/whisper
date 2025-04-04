@@ -7,4 +7,25 @@ whisper_env/
 
 # Log files (as seen in README)
 *.log
-*.err 
+*.err
+*.wav
+.host_key_listener.lock
+
+# Cache directories
+audio_cache/
+
+# OS specific files
+.DS_Store
+
+# Virtual environment directories
+.venv/
+venv/
+host_env/
+
+# IDE / Tooling
+.cursor/
+.artifacts/
+
+# Python cache
+__pycache__/
+*.pyc 

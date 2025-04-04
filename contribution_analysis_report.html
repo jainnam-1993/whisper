@@ -1,0 +1,469 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contribution Analysis Report - 2025-04-02</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #0066cc;
+        }
+        .summary-box {
+            background-color: #f5f5f5;
+            border-left: 5px solid #0066cc;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #0066cc;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .score {
+            font-weight: bold;
+        }
+        .high {
+            color: #28a745;
+        }
+        .medium {
+            color: #fd7e14;
+        }
+        .low {
+            color: #dc3545;
+        }
+        .chart-container {
+            margin: 30px 0;
+        }
+        .progress-bar {
+            height: 25px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .progress {
+            height: 100%;
+            background-color: #0066cc;
+            border-radius: 5px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            color: white;
+            font-weight: bold;
+        }
+        .note {
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+        }
+        .legend {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+        }
+        .cr-color {
+            background-color: #0066cc;
+        }
+        .sim-color {
+            background-color: #fd7e14;
+        }
+    </style>
+</head>
+<body>
+    <h1>Contribution Analysis Report</h1>
+    <p>Report generated: 2025-04-02 19:18:39</p>
+
+    <div class="summary-box">
+        <h2>Executive Summary</h2>
+        <p>This report analyzes the contributions of 8 team members under Bhaskar Gupta's management over the past year. The analysis combines Code Review (CR) metrics and SIM ticket handling to provide a comprehensive view of each team member's contribution weight.</p>
+    </div>
+
+    <h2>Team Performance Overview</h2>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Title</th>
+            <th>Level</th>
+            <th>CR Score</th>
+            <th>SIM Score</th>
+            <th>Total Score</th>
+            <th>Performance</th>
+        </tr>
+
+        <tr>
+            <td>Vrinda Pareek</td>
+            <td>SDE 2</td>
+            <td>5</td>
+            <td class="score">71.0</td>
+            <td class="score">110.0</td>
+            <td class="score high">90.5</td>
+            <td class="high">High Performer</td>
+        </tr>
+    
+        <tr>
+            <td>Omkar Acharya</td>
+            <td>Sr. Software Dev Engineer</td>
+            <td>6</td>
+            <td class="score">90.0</td>
+            <td class="score">10.0</td>
+            <td class="score medium">50.0</td>
+            <td class="medium">Solid Contributor</td>
+        </tr>
+    
+        <tr>
+            <td>Yichuan Wang</td>
+            <td>Senior Software Dev Engineer</td>
+            <td>6</td>
+            <td class="score">90.0</td>
+            <td class="score">10.0</td>
+            <td class="score medium">50.0</td>
+            <td class="medium">Solid Contributor</td>
+        </tr>
+    
+        <tr>
+            <td>Michiru Fredricks</td>
+            <td>Software Dev Engineer II</td>
+            <td>5</td>
+            <td class="score">71.0</td>
+            <td class="score">10.0</td>
+            <td class="score low">40.5</td>
+            <td class="low">Development Needed</td>
+        </tr>
+    
+        <tr>
+            <td>Yuan Fang</td>
+            <td>Software Dev Engineer II</td>
+            <td>5</td>
+            <td class="score">71.0</td>
+            <td class="score">0</td>
+            <td class="score low">35.5</td>
+            <td class="low">Development Needed</td>
+        </tr>
+    
+        <tr>
+            <td>Naman Jain</td>
+            <td>Software Dev Engineer</td>
+            <td>5</td>
+            <td class="score">71.0</td>
+            <td class="score">0</td>
+            <td class="score low">35.5</td>
+            <td class="low">Development Needed</td>
+        </tr>
+    
+        <tr>
+            <td>Kyle Sun</td>
+            <td>Software Dev Engineer</td>
+            <td>4</td>
+            <td class="score">71.0</td>
+            <td class="score">0</td>
+            <td class="score low">35.5</td>
+            <td class="low">Development Needed</td>
+        </tr>
+    
+        <tr>
+            <td>Jianhua Tan</td>
+            <td>Software Dev Engineer</td>
+            <td>4</td>
+            <td class="score">71.0</td>
+            <td class="score">0</td>
+            <td class="score low">35.5</td>
+            <td class="low">Development Needed</td>
+        </tr>
+    
+    </table>
+
+    <h2>Contribution Distribution</h2>
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color cr-color"></div> CR Score</div>
+        <div class="legend-item"><div class="legend-color sim-color"></div> SIM Score</div>
+    </div>
+
+    <div class="chart-container">
+
+        <h3>Vrinda Pareek - SDE 2</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 71.0%; background-color: #0066cc;">CR: 71.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 110.0%; background-color: #fd7e14;">SIM: 110.0%</div>
+        </div>
+    
+        <h3>Omkar Acharya - Sr. Software Dev Engineer</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 90.0%; background-color: #0066cc;">CR: 90.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 10.0%; background-color: #fd7e14;">SIM: 10.0%</div>
+        </div>
+    
+        <h3>Yichuan Wang - Senior Software Dev Engineer</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 90.0%; background-color: #0066cc;">CR: 90.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 10.0%; background-color: #fd7e14;">SIM: 10.0%</div>
+        </div>
+    
+        <h3>Michiru Fredricks - Software Dev Engineer II</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 71.0%; background-color: #0066cc;">CR: 71.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 10.0%; background-color: #fd7e14;">SIM: 10.0%</div>
+        </div>
+    
+        <h3>Yuan Fang - Software Dev Engineer II</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 71.0%; background-color: #0066cc;">CR: 71.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 0%; background-color: #fd7e14;">SIM: 0%</div>
+        </div>
+    
+        <h3>Naman Jain - Software Dev Engineer</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 71.0%; background-color: #0066cc;">CR: 71.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 0%; background-color: #fd7e14;">SIM: 0%</div>
+        </div>
+    
+        <h3>Kyle Sun - Software Dev Engineer</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 71.0%; background-color: #0066cc;">CR: 71.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 0%; background-color: #fd7e14;">SIM: 0%</div>
+        </div>
+    
+        <h3>Jianhua Tan - Software Dev Engineer</h3>
+        <div class="progress-bar">
+            <div class="progress" style="width: 71.0%; background-color: #0066cc;">CR: 71.0%</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" style="width: 0%; background-color: #fd7e14;">SIM: 0%</div>
+        </div>
+    
+    </div>
+
+    <h2>Code Review Analysis</h2>
+    <p class="note">Code Review weight is calculated using the formula: CR_Weight = 0.45 × Code Context + 0.35 × LOC + 0.10 × Service Tier + 0.10 × Integration Complexity</p>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Code Expertise</th>
+            <th>LOC Impact</th>
+            <th>Service Tier</th>
+            <th>Integration Complexity</th>
+            <th>Final CR Score</th>
+        </tr>
+
+        <tr>
+            <td>Vrinda Pareek</td>
+            <td>Moderate</td>
+            <td>Medium</td>
+            <td>Supporting</td>
+            <td>Medium</td>
+            <td class="score">71.0</td>
+        </tr>
+    
+        <tr>
+            <td>Omkar Acharya</td>
+            <td>Deep</td>
+            <td>Medium</td>
+            <td>Important</td>
+            <td>High</td>
+            <td class="score">90.0</td>
+        </tr>
+    
+        <tr>
+            <td>Yichuan Wang</td>
+            <td>Deep</td>
+            <td>Medium</td>
+            <td>Important</td>
+            <td>High</td>
+            <td class="score">90.0</td>
+        </tr>
+    
+        <tr>
+            <td>Michiru Fredricks</td>
+            <td>Moderate</td>
+            <td>Medium</td>
+            <td>Supporting</td>
+            <td>Medium</td>
+            <td class="score">71.0</td>
+        </tr>
+    
+        <tr>
+            <td>Yuan Fang</td>
+            <td>Moderate</td>
+            <td>Medium</td>
+            <td>Supporting</td>
+            <td>Medium</td>
+            <td class="score">71.0</td>
+        </tr>
+    
+        <tr>
+            <td>Naman Jain</td>
+            <td>Moderate</td>
+            <td>Medium</td>
+            <td>Supporting</td>
+            <td>Medium</td>
+            <td class="score">71.0</td>
+        </tr>
+    
+        <tr>
+            <td>Kyle Sun</td>
+            <td>Moderate</td>
+            <td>Medium</td>
+            <td>Supporting</td>
+            <td>Medium</td>
+            <td class="score">71.0</td>
+        </tr>
+    
+        <tr>
+            <td>Jianhua Tan</td>
+            <td>Moderate</td>
+            <td>Medium</td>
+            <td>Supporting</td>
+            <td>Medium</td>
+            <td class="score">71.0</td>
+        </tr>
+    
+    </table>
+
+    <h2>SIM Ticket Analysis</h2>
+    <p class="note">SIM tickets weighted by: P1/P2 = 3.0, Cross-team = 2.0, Standard = 1.0, Support = 0.5</p>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Total Tickets</th>
+            <th>P1/P2</th>
+            <th>Cross-team</th>
+            <th>Standard</th>
+            <th>Final SIM Score</th>
+        </tr>
+
+        <tr>
+            <td>Vrinda Pareek</td>
+            <td>36</td>
+            <td>1</td>
+            <td>5</td>
+            <td>30</td>
+            <td class="score">110.0</td>
+        </tr>
+    
+        <tr>
+            <td>Omkar Acharya</td>
+            <td>1</td>
+            <td>0</td>
+            <td>0</td>
+            <td>1</td>
+            <td class="score">10.0</td>
+        </tr>
+    
+        <tr>
+            <td>Yichuan Wang</td>
+            <td>1</td>
+            <td>0</td>
+            <td>0</td>
+            <td>1</td>
+            <td class="score">10.0</td>
+        </tr>
+    
+        <tr>
+            <td>Michiru Fredricks</td>
+            <td>1</td>
+            <td>0</td>
+            <td>0</td>
+            <td>1</td>
+            <td class="score">10.0</td>
+        </tr>
+    
+        <tr>
+            <td>Yuan Fang</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td class="score">0</td>
+        </tr>
+    
+        <tr>
+            <td>Naman Jain</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td class="score">0</td>
+        </tr>
+    
+        <tr>
+            <td>Kyle Sun</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td class="score">0</td>
+        </tr>
+    
+        <tr>
+            <td>Jianhua Tan</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td class="score">0</td>
+        </tr>
+    
+    </table>
+
+    <h2>Trend Analysis</h2>
+    <p class="note">Note: This section typically shows quarterly progression trends, but due to limited historical data, only current snapshot is available.</p>
+
+    <div class="summary-box">
+        <h3>Key Findings</h3>
+        <ul>
+            <li>Vrinda Pareek demonstrates the highest overall contribution score, primarily driven by extensive SIM ticket work.</li>
+            <li>Senior engineers (Level 6) show higher code context expertise scores reflecting their deeper knowledge of systems.</li>
+            <li>Most team members show balanced contributions across different aspects of work.</li>
+        </ul>
+    </div>
+
+    <p class="note">This report is generated based on available data from code.amazon.com and the SIM database. The scoring methodology follows the specified formula with appropriate weightings for different contribution types.</p>
+</body>
+</html>

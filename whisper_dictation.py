@@ -311,19 +311,26 @@ if __name__ == "__main__":
     app = StatusBarApp(recorder, args.language, args.max_time)
     if args.k_double_cmd:
         key_listener = DoubleCommandKeyListener(app)
+        listener = keyboard.Listener(on_press=key_listener.on_key_press, on_release=key_listener.on_key_release)
     else:
-        key_listener = GlobalKeyListener(app, args.key_combination)
-    listener = keyboard.Listener(on_press=key_listener.on_key_press, on_release=key_listener.on_key_release)
-    listener.start()
+        print(f"Using Global Key Combination listener: {args.key_combination}")
+        try:
+            key_listener = GlobalKeyListener(app, args.key_combination)
+            listener = keyboard.Listener(on_press=key_listener.on_key_press, on_release=key_listener.on_key_release)
+        except Exception as e:
+            print(f"Error initializing GlobalKeyListener with combination '{args.key_combination}': {e}")
+            print("Please check the --key_combination format (e.g., 'cmd+option').")
+            sys.exit(1)
 
-    # Set up signal handlers for graceful shutdown
-    # Create a partial function that includes our objects
-    def handle_signal(sig, frame):
-        signal_handler(sig, frame, app, recorder, listener)
-    
-    # Register the signal handlers
-    signal.signal(signal.SIGINT, handle_signal)  # Ctrl+C
-    signal.signal(signal.SIGTERM, handle_signal)  # Termination request
+    # Start the selected listener
+    print("Starting keyboard listener...")
+    listener.start()
+    print("Listener started.")
+
+    # Register signal handler for graceful shutdown
+    # Ensure we handle both interrupt (Ctrl+C) and termination signals
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     print("Running... (Press Ctrl+C to exit)")
     try:

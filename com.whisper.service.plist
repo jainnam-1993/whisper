@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.whisper.service</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-c</string>
+        <string>source /Volumes/workplace/tools/whisper/venv/bin/activate && python /Volumes/workplace/tools/whisper/whisper_service.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/jainnam/Library/Logs/com.whisper.service.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jainnam/Library/Logs/com.whisper.service.stderr.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Volumes/workplace/tools/whisper</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Volumes/workplace/tools/whisper/venv/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Volumes/workplace/tools/whisper</string>
+        <key>VIRTUAL_ENV</key>
+        <string>/Volumes/workplace/tools/whisper/venv</string>
+    </dict>
+</dict>
+</plist> 
