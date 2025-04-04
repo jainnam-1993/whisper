@@ -9,6 +9,9 @@ import fcntl
 import psutil
 from typing import Optional
 
+HEARTBEAT_FILE = "/tmp/whisper_dictation.heartbeat" # Path to the heartbeat file
+HEARTBEAT_TIMEOUT = 15 # Max seconds since last heartbeat before considering stale
+
 class SingleInstanceException(Exception):
     pass
 
@@ -74,25 +77,58 @@ class WhisperService:
         sys.exit(0)
 
     def verify_process_health(self) -> bool:
-        """Verify if the whisper process is healthy"""
+        """Verify if the whisper process is healthy by checking PID and heartbeat file."""
         if not self.process:
             return False
             
         try:
-            # Check if main process is alive
-            if self.process.poll() is not None:
+            # 1. Basic Process Check (PID exists, not zombie)
+            proc = psutil.Process(self.process.pid)
+            if not proc.is_running() or proc.status() == 'zombie':
+                print(f"Health Check Fail: Process PID {self.process.pid} not running or zombie.")
                 return False
                 
-            # Give the process some time to load on first check
-            # This prevents rapid restarts while the model is loading
-            proc = psutil.Process(self.process.pid)
-            if proc.is_running() and proc.status() != 'zombie':
-                return True
+            # 2. Heartbeat File Check
+            if not os.path.exists(HEARTBEAT_FILE):
+                # Allow some grace time initially for the file to be created
+                if time.time() - proc.create_time() > HEARTBEAT_TIMEOUT * 2:
+                     print(f"Health Check Fail: Heartbeat file {HEARTBEAT_FILE} missing after grace period.")
+                     return False
+                else:
+                     # Still within grace period, assume ok for now
+                     return True 
+
+            last_heartbeat_time = 0
+            try:
+                with open(HEARTBEAT_FILE, 'r') as f:
+                    last_heartbeat_time = float(f.read().strip())
+            except (IOError, ValueError) as e:
+                print(f"Health Check Warning: Could not read heartbeat file {HEARTBEAT_FILE}: {e}")
+                # If we can't read it, assume stale after grace period
+                if time.time() - proc.create_time() > HEARTBEAT_TIMEOUT * 2:
+                     return False
+                else:
+                     return True
+
+            time_since_heartbeat = time.time() - last_heartbeat_time
+            if time_since_heartbeat > HEARTBEAT_TIMEOUT:
+                print(f"Health Check Fail: Last heartbeat {time_since_heartbeat:.1f}s ago (threshold {HEARTBEAT_TIMEOUT}s).")
+                return False
                 
-            return False
+            # If all checks pass
+            return True
             
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess:
+            print(f"Health Check Fail: Process PID {self.process.pid} does not exist.")
             return False
+        except psutil.AccessDenied:
+             print(f"Health Check Warning: Access denied checking PID {self.process.pid}.")
+             # Can't verify, assume ok for now to avoid unnecessary restarts
+             return True
+        except Exception as e:
+             print(f"Health Check Error: Unexpected error verifying PID {self.process.pid}: {e}")
+             # Assume ok on unexpected error
+             return True
 
     def should_restart(self) -> bool:
         now = time.time()
