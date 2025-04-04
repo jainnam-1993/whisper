@@ -6,9 +6,8 @@
     <string>com.whisper.service</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/zsh</string>
-        <string>-c</string>
-        <string>source /Volumes/workplace/tools/whisper/venv/bin/activate && python /Volumes/workplace/tools/whisper/whisper_service.py</string>
+        <string>/Volumes/workplace/tools/whisper/venv/bin/python</string>
+        <string>/Volumes/workplace/tools/whisper/whisper_service.py</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
