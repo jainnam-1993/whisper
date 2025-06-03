@@ -1,0 +1,21 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "transcribe:StartStreamTranscription",
+                "transcribe:StartTranscriptionJob",
+                "transcribe:GetTranscriptionJob",
+                "transcribe:ListTranscriptionJobs",
+                "transcribe:DeleteTranscriptionJob",
+                "transcribe:CreateVocabulary",
+                "transcribe:GetVocabulary",
+                "transcribe:ListVocabularies",
+                "transcribe:UpdateVocabulary",
+                "transcribe:DeleteVocabulary"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

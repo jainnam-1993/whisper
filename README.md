@@ -1,294 +1,371 @@
-# Multilingual Dictation App based on OpenAI Whisper
-Multilingual dictation app based on the powerful OpenAI Whisper ASR model(s) to provide accurate and efficient speech-to-text conversion in any application. The app runs in the background and is triggered through a keyboard shortcut. It is also entirely offline, so no data will be shared. It allows users to set up their own keyboard combinations and choose from different Whisper models, and languages.
+# Whisper Dictation
 
-## Prerequisites
-The PortAudio and llvm library is required for this app to work. You can install it on macOS using the following command:
+A multilingual dictation app based on OpenAI's Whisper ASR model for accurate offline speech-to-text conversion. The app runs in the background and is triggered through keyboard shortcuts, supporting multiple languages and Whisper models.
 
+## 🚀 Quick Start
+
+### Prerequisites
 ```bash
+# macOS requirements
 brew install portaudio llvm
 ```
 
-## Permissions
-The app requires accessibility permissions to register global hotkeys and permission to access your microphone for speech recognition.
-
-## Installation
-Clone the repository:
-
+### Installation
 ```bash
 git clone https://github.com/foges/whisper-dictation.git
 cd whisper-dictation
-```
 
-If you use poetry:
+# Option 1: Using Poetry (recommended)
+poetry install && poetry shell
 
-```shell
-poetry install
-poetry shell
-```
-
-Or, if you don't use poetry, first create a virtual environment:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-Install the required packages:
-
-```bash
-# Option 1: Using requirements.txt
+# Option 2: Using pip
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# Option 2: Install packages directly
-pip install pyaudio numpy rumps pynput
-pip install git+https://github.com/openai/whisper.git
 ```
 
-## Usage
-Run the application:
-
+### Basic Usage
 ```bash
+# Start with default settings (base model, cmd+option hotkey)
 python whisper_dictation.py
+
+# Advanced usage
+python whisper_dictation.py -m large -k cmd_r+shift -l en --max_time 120
 ```
 
-By default, the app uses the "base" Whisper ASR model and the key combination to toggle dictation is cmd+option on macOS and ctrl+alt on other platforms. You can change the model and the key combination using command-line arguments.  Note that models other than `tiny` and `base` can be slow to transcribe and are not recommended unless you're using a powerful computer, ideally one with a CUDA-enabled GPU. For example:
+## 📋 Table of Contents
 
+- [Features](#features)
+- [Installation & Setup](#installation--setup)
+- [Usage Guide](#usage-guide)
+- [Service Management](#service-management)
+- [Docker Deployment](#docker-deployment)
+- [AWS Integration](#aws-integration)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+
+## ✨ Features
+
+- **Offline Processing**: No data sharing, completely local transcription
+- **Multi-language Support**: Supports 99+ languages via Whisper models
+- **Flexible Hotkeys**: Customizable keyboard shortcuts
+- **Multiple Models**: Choose from tiny to large models based on your hardware
+- **Service Integration**: Auto-start on login with crash recovery
+- **Docker Support**: Containerized deployment with health monitoring
+- **AWS Integration**: Optional AWS Transcribe streaming support
+- **Unlimited Recording**: No artificial time limits (configurable)
+
+## 🛠 Installation & Setup
+
+### System Requirements
+- macOS (primary support)
+- Python 3.8+
+- PortAudio and LLVM libraries
+- Microphone and accessibility permissions
+
+### Detailed Installation
+
+1. **Install Dependencies**
+   ```bash
+   brew install portaudio llvm
+   ```
+
+2. **Clone and Setup**
+   ```bash
+   git clone https://github.com/foges/whisper-dictation.git
+   cd whisper-dictation
+   
+   # Using Poetry
+   poetry install
+   poetry shell
+   
+   # Or using pip
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+3. **Grant Permissions**
+   - **Accessibility**: System Settings → Privacy & Security → Accessibility → Add Python.app
+   - **Microphone**: System Settings → Privacy & Security → Microphone → Add Python.app
+
+4. **Test Installation**
+   ```bash
+   python whisper_dictation.py --model_name base
+   ```
+
+## 📖 Usage Guide
+
+### Basic Controls
+
+| Hotkey | Action |
+|--------|--------|
+| `Cmd+Option` (default) | Start/Stop recording |
+| `Double Right Cmd` | Start recording (alternative) |
+| `Single Right Cmd` | Stop recording (alternative) |
+
+### Command Line Options
 
 ```bash
-python whisper_dictation.py -m large -k cmd_r+shift -l en
+python whisper_dictation.py [OPTIONS]
+
+Options:
+  -m, --model_name     Whisper model: tiny, base, small, medium, large
+  -l, --language       Language code (e.g., 'en', 'es', 'fr')
+  -k, --key           Custom hotkey combination
+  -t, --max_time      Recording time limit (default: unlimited)
+  --k_double_cmd      Use double Right Cmd key trigger
 ```
 
-The models are multilingual, and you can specify a two-letter language code (e.g., "no" for Norwegian) with the `-l` or `--language` option. Specifying the language can improve recognition accuracy, especially for smaller model sizes.
+### Model Selection Guide
 
-#### Replace macOS default dictation trigger key
-You can use this app to replace macOS built-in dictation. Trigger to begin recording with a double click of Right Command key and stop recording with a single click of Right Command key.
+| Model | Size | Speed | Accuracy | Use Case |
+|-------|------|-------|----------|----------|
+| `tiny` | ~39MB | Fastest | Good | Quick notes, low-end hardware |
+| `base` | ~74MB | Fast | Better | General use (recommended) |
+| `small` | ~244MB | Medium | Good | Balanced performance |
+| `medium` | ~769MB | Slow | Better | High accuracy needs |
+| `large` | ~1550MB | Slowest | Best | Maximum accuracy, powerful hardware |
+
+### Language Support
+
+Specify language for better accuracy:
 ```bash
-python whisper_dictation.py -m large --k_double_cmd -l en
-```
-To use this trigger, go to System Settings -> Keyboard, disable Dictation. If you double click Right Command key on any text field, macOS will ask whether you want to enable Dictation, so select Don't Ask Again.
-
-## Setting the App as a Startup Item
-To have the app run automatically when your computer starts, follow these steps:
-
- 1. Open System Preferences.
- 2. Go to Users & Groups.
- 3. Click on your username, then select the Login Items tab.
- 4. Click the + button and add the `run.sh` script from the whisper-dictation folder.
-
-# Whisper Dictation
-
-A dictation tool that uses OpenAI's Whisper model for speech-to-text transcription.
-
-## Setup
-
-The application has been set up to start automatically when you log in to your Mac.
-
-### Key Commands
-
-- **Double-click the Right Command key (⌘)** to start recording
-- **Single-click the Right Command key (⌘)** to stop recording and transcribe
-
-### Status Indicator
-
-Look for the "⏯" icon in your menu bar. When recording, it will show a timer and a red dot.
-
-## Managing the Service
-
-### Check if the service is running
-
-```bash
-ps aux | grep -i whisper
+python whisper_dictation.py -l en    # English
+python whisper_dictation.py -l es    # Spanish
+python whisper_dictation.py -l fr    # French
+python whisper_dictation.py -l de    # German
+# ... supports 99+ languages
 ```
 
-### Start the service manually
+## 🔧 Service Management
 
+### Auto-Start Setup
+
+1. **Install Service**
+   ```bash
+   # Copy launch agent
+   cp com.whisper.service.plist ~/Library/LaunchAgents/
+   
+   # Load service
+   launchctl load ~/Library/LaunchAgents/com.whisper.service.plist
+   ```
+
+2. **Service Control**
+   ```bash
+   # Using management script
+   ./manage_whisper.py start    # Start service
+   ./manage_whisper.py stop     # Stop service  
+   ./manage_whisper.py restart  # Restart service
+   ./manage_whisper.py status   # Check status
+   
+   # Using launchctl directly
+   launchctl start com.whisper.service
+   launchctl stop com.whisper.service
+   ```
+
+### Service Features
+
+- **Auto-Recovery**: Immediate restart on crashes
+- **Health Monitoring**: Regular process health checks
+- **Resource Management**: Optimized GPU memory usage (512MB)
+- **Clean Shutdown**: Proper resource cleanup on termination
+
+### Monitoring
+
+- **Logs**: `/var/log/whisper/whisper.log`
+- **Errors**: `/var/log/whisper/whisper.error.log`
+- **Status**: Check menu bar for ⏯ icon with recording timer
+
+## 🐳 Docker Deployment
+
+### Quick Start
 ```bash
-launchctl start com.user.whisper-dictation
+# Build and start
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f whisper
 ```
 
-### Stop the service
+### Architecture
 
-```bash
-launchctl stop com.user.whisper-dictation
+The Docker setup uses a hybrid approach:
+- **Host**: Key listener (`host_key_listener.py`) handles hotkeys and clipboard
+- **Container**: Whisper transcription service runs in isolated environment
+- **Communication**: HTTP API between host and container
+
+### Configuration
+
+Edit `docker-compose.yml` for customization:
+```yaml
+environment:
+  - WHISPER_MODEL=base
+  - WHISPER_LANGUAGE=en
+  - MAX_RECORDING_TIME=300
 ```
 
-### Disable the service from starting at login
+For detailed Docker setup, see [DOCKER.md](docs/DOCKER.md).
+
+## ☁️ AWS Integration
+
+### AWS Transcribe Streaming
+
+Optional integration with AWS Transcribe for enhanced streaming capabilities:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.user.whisper-dictation.plist
+# Install AWS dependencies
+pip install boto3 amazon-transcribe
+
+# Configure credentials
+aws configure
+
+# Run with AWS support
+python whisper_dictation.py --use-aws-transcribe
 ```
 
-### Enable the service to start at login
+### Setup Requirements
 
+1. **AWS Credentials**: Configure via `aws configure` or IAM roles
+2. **Permissions**: Transcribe streaming permissions required
+3. **Region**: Set appropriate AWS region for optimal latency
+
+For detailed AWS setup, see [AWS_INTEGRATION.md](docs/README_AWS_INTEGRATION.md).
+
+## ⚙️ Configuration
+
+### Environment Variables
 ```bash
-launchctl load ~/Library/LaunchAgents/com.user.whisper-dictation.plist
+export WHISPER_MODEL=base
+export WHISPER_LANGUAGE=en
+export MAX_RECORDING_TIME=0  # Unlimited
 ```
 
-## Troubleshooting
+### Configuration Files
+- `startup.sh`: Service startup configuration
+- `com.whisper.service.plist`: Launch agent settings
+- `docker-compose.yml`: Docker environment settings
 
-### Accessibility Permissions
+### Advanced Settings
 
-Make sure to grant accessibility permissions to the application:
-
-1. Open System Settings (or System Preferences)
-2. Go to Privacy & Security > Accessibility
-3. Make sure Python.app is in the list and checked
-
-### Logs
-
-Check the logs for any errors:
-
+**GPU Memory Optimization**:
 ```bash
-cat /Volumes/Workspace/whisper-dictation/whisper-dictation.log
-cat /Volumes/Workspace/whisper-dictation/whisper-dictation.err
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
 ```
 
-## Configuration
-
-To change settings, edit the `startup.sh` file and modify the command-line arguments.
-
-Available options:
-- `--model_name`: Choose the Whisper model (tiny, base, small, medium, large)
-- `--language`: Specify the language for better recognition
-- `--max_time`: Maximum recording time in seconds (default: 30)
-
-## Recent Improvements
-
-### Resource Management
-
-The application has been improved to better manage system resources:
-
-* Enhanced cleanup of PyAudio streams to prevent resource leaks
-* Proper management of multiprocessing resources and semaphores
-* Thread synchronization using locks to prevent race conditions
-* Context managers for resources that need proper cleanup
-
-### Signal Handling
-
-The application now includes robust signal handling to ensure graceful shutdown:
-
-* Proper handling of SIGINT (Ctrl+C) and SIGTERM signals
-* Graceful cleanup of resources when the application is interrupted
-* Orderly shutdown sequence that ensures all resources are properly released
-* Prevention of segmentation faults during termination
-
-### Stability Enhancements
-
-The application has undergone extended run testing to ensure stability:
-
-* Tested for long recording sessions without resource leaks
-* Verified proper cleanup on all termination paths
-* Eliminated segmentation faults that occurred in previous versions
-* Improved error handling throughout the codebase
-
-To test the stability yourself, run the application for an extended period with various recording sessions:
-
+**Custom Hotkeys**:
 ```bash
-python whisper_dictation.py --model_name base --max_time 120
+python whisper_dictation.py -k "ctrl+shift+space"
 ```
 
-Start and stop recording multiple times, then exit with Ctrl+C to verify proper cleanup.
+## 🔍 Troubleshooting
 
-# Whisper Dictation Service
+### Common Issues
 
-A robust service wrapper for running the Whisper dictation system with automatic crash recovery and system startup integration.
-
-## Features
-
-- Automatic startup on system login
-- Immediate crash recovery
-- GPU memory optimization
-- Clean process management
-- Simple control interface
-
-## Service Architecture
-
-The service consists of three main components:
-
-1. **Core Service (`whisper_service.py`)**
-   - Monitors the Whisper process health
-   - Provides immediate restart on crashes
-   - Optimizes GPU memory usage
-   - Handles process signals gracefully
-
-2. **Control Interface (`manage_whisper.py`)**
-   - Provides commands to start/stop/restart the service
-   - Shows service status
-   - Manages process lifecycle
-
-3. **Auto-startup Integration (`com.whisper.service.plist`)**
-   - Ensures service starts on system login
-   - Maintains service availability
-   - Handles logging
-
-## Auto-reload Mechanism
-
-The service implements a robust auto-reload mechanism:
-
-1. **Continuous Monitoring**
-   - Checks process status every second
-   - Detects crashes through process exit codes
-   - Identifies abnormal terminations
-
-2. **Immediate Recovery**
-   - Restarts the process immediately upon any failure
-   - No artificial delays between restarts
-   - Preserves GPU memory settings across restarts
-
-3. **Resource Management**
-   - Optimizes GPU memory allocation (512MB split size)
-   - Cleans up process resources on shutdown
-   - Maintains clean process hierarchy
-
-## Installation
-
-1. Create log directory:
+**1. Recording Not Starting**
 ```bash
-sudo mkdir -p /var/log/whisper
-sudo chown $USER /var/log/whisper
+# Check permissions
+System Settings → Privacy & Security → Accessibility → Python.app ✓
+System Settings → Privacy & Security → Microphone → Python.app ✓
+
+# Check process
+ps aux | grep whisper
+
+# Check logs
+cat /var/log/whisper/whisper.log
 ```
 
-2. Install the LaunchAgent:
+**2. Service Won't Start**
 ```bash
-# Copy the launch agent to your user's LaunchAgents directory
-cp com.whisper.service.plist ~/Library/LaunchAgents/
-
-# Load the service
+# Reload launch agent
+launchctl unload ~/Library/LaunchAgents/com.whisper.service.plist
 launchctl load ~/Library/LaunchAgents/com.whisper.service.plist
-```
-
-## Usage
-
-The service can be controlled using the management script:
-
-```bash
-# Start the service
-./manage_whisper.py start
 
 # Check service status
 ./manage_whisper.py status
-
-# Stop the service
-./manage_whisper.py stop
-
-# Restart the service
-./manage_whisper.py restart
 ```
 
-## Monitoring
+**3. Poor Transcription Quality**
+- Try larger model: `-m medium` or `-m large`
+- Specify language: `-l en`
+- Check microphone quality and background noise
+- Ensure clear speech and proper distance from microphone
 
-Logs are available at:
-- Main log: `/var/log/whisper/whisper.log`
-- Error log: `/var/log/whisper/whisper.error.log`
+**4. High CPU/Memory Usage**
+- Use smaller model: `-m tiny` or `-m base`
+- Enable GPU acceleration if available
+- Check for multiple running instances
 
-## Troubleshooting
+### Log Locations
+- **Service Logs**: `/var/log/whisper/whisper.log`
+- **Error Logs**: `/var/log/whisper/whisper.error.log`
+- **Docker Logs**: `docker-compose logs whisper`
 
-1. If the service fails to start:
-   - Check the error log
-   - Verify Python environment
-   - Ensure correct file permissions
+### Getting Help
 
-2. If the service crashes frequently:
-   - Monitor GPU memory usage
-   - Check system resources
-   - Review error logs for patterns
+1. Check logs for specific error messages
+2. Verify all permissions are granted
+3. Test with minimal configuration
+4. Check GitHub issues for similar problems
+
+## 🔧 Development
+
+### Project Structure
+```
+whisper-dictation/
+├── whisper_dictation.py      # Main application
+├── whisper_service.py        # Service wrapper
+├── manage_whisper.py         # Management interface
+├── transcription_service.py  # Transcription logic
+├── host_key_listener.py      # Docker host integration
+├── accessibility_utils.py    # macOS accessibility helpers
+├── docker-compose.yml        # Docker configuration
+└── docs/                     # Additional documentation
+```
+
+### Key Components
+
+- **Core Engine**: OpenAI Whisper for speech recognition
+- **GUI Framework**: rumps for macOS menu bar integration
+- **Audio Processing**: PyAudio for microphone input
+- **Service Management**: Custom crash recovery and monitoring
+- **Clipboard Integration**: Multi-tier paste mechanism with fallbacks
+
+### Recent Improvements
+
+**Performance Optimizations** (Latest):
+- ✅ Pre-warmed audio system eliminates recording delay
+- ✅ Unlimited recording time (removed 30-second limit)
+- ✅ Enhanced resource management and cleanup
+- ✅ Improved threading and race condition handling
+
+**Stability Enhancements**:
+- Robust signal handling for graceful shutdown
+- Memory leak prevention in PyAudio streams
+- Thread synchronization with proper locking
+- Context managers for resource cleanup
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- OpenAI for the Whisper ASR model
+- Contributors and community feedback
+- macOS accessibility framework developers
+
+---
+
+**Status**: ⏯ Ready for dictation | **Version**: Latest | **Platform**: macOS Primary

@@ -15,8 +15,8 @@ def verify_process_functionality(proc: psutil.Process) -> bool:
         if not proc.is_running():
             return False
             
-        # Give a short time for children to be visible
-        time.sleep(0.5)
+        # Give sufficient time for children to be visible (whisper_dictation.py takes time to spawn)
+        time.sleep(2.0)
         
         # Check for whisper_dictation.py child process
         children = proc.children(recursive=True)
@@ -76,8 +76,8 @@ def start_service():
             service_path
         ], cwd=os.path.dirname(service_path))
         
-        # Wait for service to start and verify
-        time.sleep(2)
+        # Wait for service to start and verify (increased timeout for model loading)
+        time.sleep(12)
         proc, is_functional = find_whisper_process()
         if proc and is_functional:
             print("Whisper service started successfully")

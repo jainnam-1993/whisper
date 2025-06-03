@@ -5,3 +5,9 @@ keyboard
 argparse
 rumps
 numpy
+boto3
+librosa
+
+amazon-transcribe
+
+pyperclip

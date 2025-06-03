@@ -13,9 +13,10 @@ class SingleInstanceException(Exception):
     pass
 
 class WhisperService:
-    def __init__(self):
+    def __init__(self, no_restart=False):
         self.process = None
         self.should_run = True
+        self.no_restart = no_restart  # Testing mode - disable automatic restarts
         self.lock_file = None
         self.whisper_dir = os.path.dirname(os.path.abspath(__file__))
         self.venv_dir = os.path.join(self.whisper_dir, "venv")
@@ -25,7 +26,10 @@ class WhisperService:
         self.initial_backoff = 5  # 5 seconds
         self.setup_signal_handlers()
         self.ensure_single_instance()
-        print("Starting Whisper Service...")
+        if self.no_restart:
+            print("Starting Whisper Service in TESTING MODE (no automatic restarts)...")
+        else:
+            print("Starting Whisper Service...")
 
     def ensure_single_instance(self):
         """Ensure only one instance of the service is running"""
@@ -117,13 +121,13 @@ class WhisperService:
         python_executable = os.path.join(self.venv_dir, "bin", "python")
         whisper_script = os.path.join(self.whisper_dir, "whisper_dictation.py")
         
-        # Ensure arguments match the intended logic (using double-cmd)
+        # Use local Whisper model with double-cmd key listener
         command_args = [
             python_executable,
             whisper_script,
-            "-m", "large",
+            "-m", "medium",  # Use base model for good balance of speed/accuracy
             "-l", "en",
-            "--k_double_cmd", # Corrected: Use double dash for the flag
+            "--k_double_cmd",  # Using local Whisper model
         ]
         
         try:
@@ -139,17 +143,14 @@ class WhisperService:
             print(f"Started Whisper process with PID: {self.process.pid}")
             
             # Give the process some time to load initially
-            # Note: We can't easily see the "model loaded" message anymore,
-            # but we can still check if the process exits early.
-            print("Waiting for model to load (may take a minute or two)...")
-            time.sleep(30) # Keep a reasonable delay
+            print("Waiting for model to load...")
+            time.sleep(10) # Reduced delay for faster startup
             
             if self.process.poll() is not None:
                 print(f"Process exited early with code: {self.process.poll()}")
-                # Log the exit code or potential errors if possible (though stdout/err aren't captured)
                 return False
                 
-            print("Model should be loaded now, service ready")
+            print("Service ready")
             return True
         except Exception as e:
             print(f"Error starting process: {e}")
@@ -206,7 +207,11 @@ class WhisperService:
         """Main service loop with health checks every 10 seconds"""
         while self.should_run:
             if not self.check_process():
-                if self.should_restart():
+                if self.no_restart:
+                    print("Process stopped. Testing mode enabled - NOT restarting automatically.")
+                    print("Service will exit. Use 'python manage_whisper.py start' to restart manually.")
+                    break
+                elif self.should_restart():
                     print("Starting/Restarting Whisper process...")
                     if not self.start_process():
                         print("Failed to start process, retrying...")
@@ -217,8 +222,14 @@ class WhisperService:
         print("Whisper Service stopped.")
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Whisper Service Wrapper')
+    parser.add_argument('--no-restart', action='store_true',
+                        help='Testing mode: disable automatic restarts when process fails')
+    args = parser.parse_args()
+    
     try:
-        service = WhisperService()
+        service = WhisperService(no_restart=args.no_restart)
         service.run()
     except SingleInstanceException as e:
         print(f"Error: {e}")
