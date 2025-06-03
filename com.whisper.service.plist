@@ -4,6 +4,8 @@
 <dict>
     <key>Label</key>
     <string>com.whisper.service</string>
+    <key>Program</key>
+    <string>/Volumes/workplace/tools/whisper/venv/bin/python</string>
     <key>ProgramArguments</key>
     <array>
         <string>/Volumes/workplace/tools/whisper/venv/bin/python</string>

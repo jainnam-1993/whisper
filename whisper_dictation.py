@@ -1,17 +1,21 @@
 import argparse
 import time
 import threading
-from threading import Lock
+from threading import Lock, Event
 import pyaudio
 import numpy as np
 import rumps
 import signal
 import sys
+import os
 from pynput import keyboard
 # Conditional import - only import whisper when needed
 # from whisper import load_model  # Moved to conditional block below
 import platform
 from transcription_service import TranscriptionService, WhisperTranscriptionService, AWSTranscriptionService
+
+HEARTBEAT_FILE = "/tmp/whisper_dictation.heartbeat"
+HEARTBEAT_INTERVAL = 5 # seconds
 
 class Recorder:
     def __init__(self, transcription_service):
@@ -284,6 +288,29 @@ class StatusBarApp(rumps.App):
         else:
             self.start_app(None)
 
+# --- Heartbeat Function ---
+def _update_heartbeat(stop_event: Event):
+    """Periodically updates the heartbeat file with the current timestamp."""
+    print("Heartbeat thread started.")
+    while not stop_event.is_set():
+        try:
+            with open(HEARTBEAT_FILE, "w") as f:
+                f.write(str(time.time()))
+        except IOError as e:
+            print(f"Heartbeat Error: Could not write to {HEARTBEAT_FILE}: {e}")
+        except Exception as e:
+            print(f"Heartbeat Error: Unexpected error: {e}")
+            
+        # Wait for the specified interval or until the stop event is set
+        stop_event.wait(HEARTBEAT_INTERVAL)
+    print("Heartbeat thread stopped.")
+    # Clean up the heartbeat file when stopped
+    try:
+        if os.path.exists(HEARTBEAT_FILE):
+            os.remove(HEARTBEAT_FILE)
+            print(f"Removed heartbeat file: {HEARTBEAT_FILE}")
+    except OSError as e:
+        print(f"Heartbeat Cleanup Error: Could not remove {HEARTBEAT_FILE}: {e}")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -327,26 +354,41 @@ def parse_args():
 
     return args
 
-
-def signal_handler(sig, frame, app=None, recorder=None, listener=None):
+def signal_handler(sig, frame):
     """Handle termination signals to clean up resources gracefully."""
     print(f"\nReceived signal {sig}, shutting down gracefully...")
     
     # Stop recording if active
     if app and app.started:
-        app.stop_app(None)
-    
-    # Clean up recorder resources
-    if recorder:
-        recorder.cleanup()
-    
+        try:
+            app.stop_app(None)
+        except Exception as e:
+            print(f"Error stopping app: {e}")
+
     # Stop keyboard listener
     if listener and listener.is_alive():
-        listener.stop()
-    
-    print("Cleanup complete. Exiting.")
-    sys.exit(0)
+        try:
+            listener.stop()
+            print("Keyboard listener stopped.")
+        except Exception as e:
+            print(f"Error stopping listener: {e}")
 
+    # Stop heartbeat thread
+    if 'heartbeat_stop_event' in globals() and heartbeat_stop_event:
+        heartbeat_stop_event.set()
+    if 'heartbeat_thread' in globals() and heartbeat_thread and heartbeat_thread.is_alive():
+         # No join here, allow cleanup within the thread itself or finally block
+
+    # Clean up recorder resources AFTER stopping app and listener
+    if recorder:
+        try:
+            recorder.cleanup()
+            print("Recorder resources cleaned up.")
+        except Exception as e:
+            print(f"Error cleaning up recorder: {e}")
+
+    print("Signal handler cleanup attempted. Exiting.")
+    sys.exit(0)
 
 if __name__ == "__main__":
     args = parse_args()
@@ -394,7 +436,12 @@ if __name__ == "__main__":
     listener.start()
     print("Listener started.")
 
-    # Register signal handler for graceful shutdown
+    # --- Start Heartbeat Thread ---
+    heartbeat_stop_event = Event()
+    heartbeat_thread = threading.Thread(target=_update_heartbeat, args=(heartbeat_stop_event,), daemon=True)
+    heartbeat_thread.start()
+
+    # Register signal handlers for graceful shutdown
     # Ensure we handle both interrupt (Ctrl+C) and termination signals
     def signal_handler_wrapper(sig, frame):
         signal_handler(sig, frame, app, recorder, listener)
@@ -406,11 +453,42 @@ if __name__ == "__main__":
     print(f"Running with {service_type}... (Press Ctrl+C to exit)")
     try:
         app.run()
-    except (KeyboardInterrupt, SystemExit):
-        print("Shutting down...")
+    except (KeyboardInterrupt, SystemExit) as e:
+        print(f"Main loop interrupted ({type(e).__name__}). Shutting down...")
     finally:
-        # These will be redundant if a signal was caught,
-        # but necessary if exiting via other means
-        listener.stop()
-        recorder.cleanup()
+        # --- Final Cleanup ---
+        print("Entering finally block for cleanup...")
+        
+        # Ensure listener is stopped
+        if listener and listener.is_alive():
+            try:
+                listener.stop()
+                print("Listener stopped in finally block.")
+            except Exception as e:
+                 print(f"Error stopping listener in finally: {e}")
+
+        # Ensure heartbeat thread is stopped and file removed
+        if heartbeat_stop_event and not heartbeat_stop_event.is_set():
+            heartbeat_stop_event.set()
+        if heartbeat_thread and heartbeat_thread.is_alive():
+            heartbeat_thread.join(timeout=HEARTBEAT_INTERVAL + 1) # Wait slightly longer than interval
+            if heartbeat_thread.is_alive():
+                 print("Warning: Heartbeat thread did not exit cleanly.")
+        # Attempt cleanup again in case thread missed it
+        try:
+            if os.path.exists(HEARTBEAT_FILE):
+                os.remove(HEARTBEAT_FILE)
+                print(f"Heartbeat file removed in finally block.")
+        except OSError as e:
+             print(f"Error removing heartbeat file in finally: {e}")
+
+        # Ensure recorder is cleaned up (might be redundant if signal handler ran)
+        if recorder:
+            try:
+                recorder.cleanup()
+                print("Recorder cleaned up in finally block.")
+            except Exception as e:
+                 print(f"Error cleaning up recorder in finally: {e}")
+
+        print("Cleanup in finally block complete.")
 
