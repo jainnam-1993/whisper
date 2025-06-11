@@ -377,7 +377,8 @@ def signal_handler(sig, frame):
     if 'heartbeat_stop_event' in globals() and heartbeat_stop_event:
         heartbeat_stop_event.set()
     if 'heartbeat_thread' in globals() and heartbeat_thread and heartbeat_thread.is_alive():
-         # No join here, allow cleanup within the thread itself or finally block
+        # No join here, allow cleanup within the thread itself or finally block
+        pass
 
     # Clean up recorder resources AFTER stopping app and listener
     if recorder:
