@@ -44,7 +44,41 @@ class SingleInstanceLock:
                 pass
 
 class ClipboardManager:
-    """Handles copying text to clipboard"""
+    """Handles copying text to clipboard with preservation support"""
+    
+    def __init__(self):
+        self.preserved_content = None
+    
+    def preserve_clipboard(self):
+        """Preserve current clipboard content"""
+        try:
+            result = subprocess.run(['pbpaste'], capture_output=True, text=True, check=True)
+            self.preserved_content = result.stdout
+            print(f"Preserved clipboard content ({len(self.preserved_content)} chars)")
+            return True
+        except Exception as e:
+            print(f"Warning: Could not preserve clipboard: {e}")
+            self.preserved_content = None
+            return False
+    
+    def restore_clipboard(self):
+        """Restore previously preserved clipboard content"""
+        if self.preserved_content is not None:
+            try:
+                process = subprocess.Popen(
+                    ['pbcopy'], 
+                    stdin=subprocess.PIPE, 
+                    close_fds=True
+                )
+                process.communicate(input=self.preserved_content.encode('utf-8'))
+                print(f"✓ Restored original clipboard content ({len(self.preserved_content)} chars)")
+                return True
+            except Exception as e:
+                print(f"Warning: Could not restore clipboard: {e}")
+                return False
+        else:
+            print("No preserved clipboard content to restore")
+            return False
     
     @staticmethod
     def copy_to_clipboard(text):
@@ -207,6 +241,9 @@ class DockerCommunicator:
                     transcription = result.stdout.strip()
                     print(f"Transcription: {transcription}")
                     
+                    # Preserve original clipboard content
+                    self.clipboard.preserve_clipboard()
+                    
                     # Copy to clipboard
                     if self.clipboard.copy_to_clipboard(transcription):
                         print("Text copied to clipboard")
@@ -221,8 +258,13 @@ class DockerCommunicator:
                         # Paste the text using AppleScript
                         if self.clipboard.paste_from_clipboard():
                             print("Text pasted from clipboard")
+                            # Restore original clipboard content after successful paste
+                            time.sleep(0.5)  # Brief delay to ensure paste is complete
+                            self.clipboard.restore_clipboard()
                         else:
                             print("Failed to paste text - text is in clipboard, please paste manually (Cmd+V)")
+                            print("Original clipboard will be restored after you paste manually")
+                            # Note: In manual paste case, we don't restore immediately to allow user to paste
                             
                             # As a fallback, display what's in the clipboard
                             try:

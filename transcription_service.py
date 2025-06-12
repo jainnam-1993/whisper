@@ -44,17 +44,26 @@ class TranscriptionService(ABC):
             print("No text to type")
             return
         
+        # Preserve original clipboard content
+        original_clipboard = None
+        try:
+            original_clipboard = pyperclip.paste()
+            print(f"Preserving original clipboard content ({len(original_clipboard) if original_clipboard else 0} chars)")
+        except Exception as e:
+            print(f"Warning: Could not read original clipboard: {e}")
+        
         # Check accessibility permissions first
         if not check_accessibility_permissions():
             print("Accessibility permissions required!")
             print(get_accessibility_instructions())
             
-            # Offer clipboard fallback
+            # Offer clipboard fallback (no restoration needed since user will paste manually)
             print("Copying text to clipboard as fallback...")
             try:
                 pyperclip.copy(text)
                 print(f"Text copied to clipboard: '{text}'")
                 print("Paste using Cmd+V")
+                print("Note: Original clipboard content will be restored after you paste")
                 return
             except Exception as e:
                 print(f"Clipboard error: {e}")
@@ -144,6 +153,20 @@ class TranscriptionService(ABC):
                 print(f"All methods failed: {e}")
                 print(f"Manual input required: '{text}'")
                 print(f"Manual copy: {text}")
+        
+        # Restore original clipboard content
+        self._restore_clipboard(original_clipboard)
+    
+    def _restore_clipboard(self, original_content):
+        """Restore the original clipboard content"""
+        if original_content is not None:
+            try:
+                pyperclip.copy(original_content)
+                print(f"✓ Restored original clipboard content ({len(original_content)} chars)")
+            except Exception as e:
+                print(f"Warning: Could not restore original clipboard: {e}")
+        else:
+            print("No original clipboard content to restore")
 
 
 class WhisperTranscriptionService(TranscriptionService):
