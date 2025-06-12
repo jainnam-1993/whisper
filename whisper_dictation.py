@@ -25,6 +25,7 @@ class Recorder:
         self.p = None
         self.lock = Lock()
         self.frames_per_buffer = 1024
+        self.recording_thread = None
         self._initialize_audio_system()
 
     def _initialize_audio_system(self):
@@ -52,10 +53,10 @@ class Recorder:
 
     def start(self, language=None):
         with self.lock:
-            if not self.recording:
+            if not self.recording and (self.recording_thread is None or not self.recording_thread.is_alive()):
                 self.recording = True
-                thread = threading.Thread(target=self._record_impl, args=(language,))
-                thread.start()
+                self.recording_thread = threading.Thread(target=self._record_impl, args=(language,))
+                self.recording_thread.start()
 
     def stop(self):
         with self.lock:
@@ -445,7 +446,7 @@ if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
     # Ensure we handle both interrupt (Ctrl+C) and termination signals
     def signal_handler_wrapper(sig, frame):
-        signal_handler(sig, frame, app, recorder, listener)
+        signal_handler(sig, frame)
     
     signal.signal(signal.SIGINT, signal_handler_wrapper)
     signal.signal(signal.SIGTERM, signal_handler_wrapper)

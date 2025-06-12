@@ -14,7 +14,7 @@
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <false/>
     <key>StandardOutPath</key>
     <string>/Users/jainnam/Library/Logs/com.whisper.service.stdout.log</string>
     <key>StandardErrorPath</key>

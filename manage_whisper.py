@@ -71,10 +71,13 @@ def start_service():
     try:
         # Start the service with working directory explicitly set
         service_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'whisper_service.py')
-        subprocess.Popen([
+        process = subprocess.Popen([
             'python3',
             service_path
-        ], cwd=os.path.dirname(service_path))
+        ], cwd=os.path.dirname(service_path), 
+        start_new_session=True,  # Create new process group
+        stdout=subprocess.DEVNULL,  # Suppress output to avoid blocking
+        stderr=subprocess.DEVNULL)
         
         # Wait for service to start and verify (increased timeout for model loading)
         time.sleep(12)

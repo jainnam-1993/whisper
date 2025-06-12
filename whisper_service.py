@@ -38,6 +38,9 @@ class WhisperService:
         """Ensure only one instance of the service is running"""
         lock_path = "/tmp/whisper_service.lock"
         
+        # Kill any existing whisper processes before claiming lock
+        self.kill_all_whisper_processes()
+        
         # Clean up stale lock file if it exists
         if os.path.exists(lock_path):
             try:
@@ -46,6 +49,14 @@ class WhisperService:
                         old_pid = int(f.read().strip())
                         if not psutil.pid_exists(old_pid):
                             os.unlink(lock_path)
+                        else:
+                            # Active process exists, kill it
+                            try:
+                                psutil.Process(old_pid).kill()
+                                time.sleep(1)
+                                os.unlink(lock_path)
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                os.unlink(lock_path)
                     except (ValueError, psutil.NoSuchProcess):
                         os.unlink(lock_path)
             except (IOError, OSError):
@@ -59,6 +70,44 @@ class WhisperService:
         except IOError:
             self.lock_file.close()
             raise SingleInstanceException("Another instance is already running")
+            
+    def kill_all_whisper_processes(self):
+        """Kill all existing whisper processes"""
+        killed_pids = []
+        for proc in psutil.process_iter(['pid', 'cmdline']):
+            try:
+                if proc.info['cmdline']:
+                    cmdline_str = ' '.join(proc.info['cmdline'])
+                    if ('whisper_dictation.py' in cmdline_str or 
+                        'whisper_service.py' in cmdline_str) and proc.info['pid'] != os.getpid():
+                        print(f"Killing existing whisper process PID: {proc.info['pid']}")
+                        psutil.Process(proc.info['pid']).kill()
+                        killed_pids.append(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        
+        # Wait for all killed processes to actually terminate
+        if killed_pids:
+            print(f"Killed {len(killed_pids)} existing whisper processes")
+            max_wait = 10  # Maximum wait time in seconds
+            start_time = time.time()
+            
+            while killed_pids and (time.time() - start_time) < max_wait:
+                still_running = []
+                for pid in killed_pids:
+                    try:
+                        if psutil.pid_exists(pid):
+                            still_running.append(pid)
+                    except:
+                        pass
+                killed_pids = still_running
+                if killed_pids:
+                    time.sleep(0.5)
+            
+            if killed_pids:
+                print(f"Warning: {len(killed_pids)} processes still running after cleanup")
+            else:
+                print("All processes successfully terminated")
         
     def setup_signal_handlers(self):
         """Set up handlers for graceful shutdown"""
@@ -167,10 +216,11 @@ class WhisperService:
         ]
         
         try:
-            # Launch directly, without shell, inheriting stdio
+            # Launch directly, without shell, with proper process group management
             self.process = subprocess.Popen(
                 command_args,
                 cwd=self.whisper_dir,
+                start_new_session=True,  # Create new process group for proper cleanup
                 # No shell=True
                 # No stdout=subprocess.PIPE
                 # No stderr=subprocess.STDOUT
@@ -197,27 +247,59 @@ class WhisperService:
         if self.process:
             print(f"Stopping Whisper process (PID: {self.process.pid})...")
             try:
-                # Try to terminate gracefully first
-                self.process.terminate()
-                try:
-                    self.process.wait(timeout=5)  # Wait up to 5 seconds for graceful termination
-                except subprocess.TimeoutExpired:
-                    print("Process didn't terminate gracefully, forcing...")
-                    self.process.kill()
-                    
-                # Clean up any child processes
+                # First, kill all child processes
                 try:
                     proc = psutil.Process(self.process.pid)
                     children = proc.children(recursive=True)
                     for child in children:
+                        print(f"Killing child process PID: {child.pid}")
                         child.kill()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
+                
+                # Try to terminate gracefully first
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=3)  # Reduced timeout
+                except subprocess.TimeoutExpired:
+                    print("Process didn't terminate gracefully, forcing...")
+                    self.process.kill()
+                    self.process.wait(timeout=2)  # Ensure it's dead
                     
             except Exception as e:
                 print(f"Error stopping process: {e}")
             finally:
                 self.process = None
+                
+        # Kill any remaining whisper processes (nuclear option)
+        orphaned_pids = []
+        try:
+            for proc in psutil.process_iter(['pid', 'cmdline']):
+                try:
+                    if proc.info['cmdline'] and any('whisper_dictation.py' in str(arg) for arg in proc.info['cmdline']):
+                        print(f"Killing orphaned whisper process PID: {proc.info['pid']}")
+                        psutil.Process(proc.info['pid']).kill()
+                        orphaned_pids.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception as e:
+            print(f"Error in cleanup: {e}")
+        
+        # Wait for orphaned processes to terminate
+        if orphaned_pids:
+            max_wait = 5
+            start_time = time.time()
+            while orphaned_pids and (time.time() - start_time) < max_wait:
+                still_running = []
+                for pid in orphaned_pids:
+                    try:
+                        if psutil.pid_exists(pid):
+                            still_running.append(pid)
+                    except:
+                        pass
+                orphaned_pids = still_running
+                if orphaned_pids:
+                    time.sleep(0.5)
 
     def check_process(self) -> bool:
         """Check if the process is still running and healthy"""

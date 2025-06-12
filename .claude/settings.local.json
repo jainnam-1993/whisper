@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(launchctl:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(python:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}
