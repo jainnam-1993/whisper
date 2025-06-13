@@ -7,6 +7,7 @@ import traceback
 import sys
 import fcntl
 from pynput import keyboard
+from accessibility_utils import _execute_applescript_safely
 
 class SingleInstanceLock:
     """Ensures only one instance of the application runs at a time"""
@@ -116,8 +117,8 @@ class ClipboardManager:
             end try
             '''
             
-            # Execute the AppleScript
-            result = subprocess.run(["osascript", "-e", applescript], capture_output=True, text=True)
+            # Execute the AppleScript securely
+            result = _execute_applescript_safely(applescript, timeout=5)
             print(f"AppleScript result: stdout={result.stdout.strip()}, stderr={result.stderr.strip()}")
             
             if result.returncode == 0 and "error:" not in result.stdout:
@@ -126,6 +127,9 @@ class ClipboardManager:
             else:
                 print(f"AppleScript paste failed: {result.stderr or result.stdout}")
                 return False
+        except (RuntimeError, ValueError) as e:
+            print(f"Secure AppleScript execution failed: {e}")
+            return False
         except Exception as e:
             print(f"Error pasting with AppleScript: {e}")
             traceback.print_exc()

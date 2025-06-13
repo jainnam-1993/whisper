@@ -127,6 +127,7 @@ class StreamingTranscriptionTester:
     def __init__(self):
         self.whisper_model = None
         self.transcribe_client = None
+        self.original_env = None
         
     def load_whisper_model(self, model_name="medium"):
         """Load Whisper model for comparison"""
@@ -150,9 +151,17 @@ class StreamingTranscriptionTester:
             if not credentials:
                 raise Exception("No AWS credentials found. Please configure your credentials.")
             
-            print(f"Using AWS credentials: {credentials.access_key[:8]}...")
+            print("AWS credentials loaded successfully")
             
-            # Set environment variables for the amazon-transcribe library
+            # Temporarily set environment variables for the amazon-transcribe library
+            # Store original values to restore later
+            original_env = {}
+            env_keys = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_DEFAULT_REGION']
+            
+            for key in env_keys:
+                if key in os.environ:
+                    original_env[key] = os.environ[key]
+            
             os.environ['AWS_ACCESS_KEY_ID'] = credentials.access_key
             os.environ['AWS_SECRET_ACCESS_KEY'] = credentials.secret_key
             if credentials.token:
@@ -161,11 +170,36 @@ class StreamingTranscriptionTester:
             
             # Create TranscribeStreamingClient
             self.transcribe_client = TranscribeStreamingClient(region=region)
+            
+            # Store original environment for cleanup
+            self.original_env = original_env
+            
             print(f"AWS Transcribe Streaming client initialized for region: {region}")
             return True
         except Exception as e:
             print(f"Failed to initialize AWS Transcribe client: {e}")
             return False
+    
+    def cleanup_aws_credentials(self):
+        """Clean up AWS credentials from environment variables"""
+        if self.original_env is not None:
+            try:
+                # Clear AWS credentials from environment
+                for key in ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']:
+                    if key in os.environ:
+                        del os.environ[key]
+                
+                # Restore original environment
+                for key, value in self.original_env.items():
+                    os.environ[key] = value
+                    
+                print("AWS credentials cleaned up from environment")
+            except Exception as e:
+                print(f"Warning: Could not clean up AWS credentials: {e}")
+                
+    def __del__(self):
+        """Cleanup when object is destroyed"""
+        self.cleanup_aws_credentials()
             
     async def test_streaming_transcription(self, audio_source="microphone", duration=10, audio_file=None):
         """Test AWS Transcribe streaming performance"""

@@ -9,11 +9,71 @@ required for automated keyboard input to other applications.
 import platform
 import subprocess
 import sys
+import re
+import shlex
 
 
 def is_macos():
     """Check if running on macOS"""
     return platform.system() == 'Darwin'
+
+
+def _sanitize_applescript(script):
+    """
+    Sanitize AppleScript to prevent injection attacks.
+    This is a whitelist approach - only allow safe characters and patterns.
+    """
+    if not isinstance(script, str):
+        raise ValueError("AppleScript must be a string")
+    
+    # Remove any suspicious characters that could be used for injection
+    # Allow only alphanumeric, spaces, quotes, parentheses, and AppleScript keywords
+    allowed_pattern = r'[a-zA-Z0-9\s\"\'\(\)\{\}\[\]\.\,\:\;\-\_\&\|\n\t]'
+    sanitized = ''.join(char for char in script if re.match(allowed_pattern, char))
+    
+    # Check for dangerous patterns
+    dangerous_patterns = [
+        r'do\s+shell\s+script',  # Execute shell commands
+        r'system\s+events.*keystroke.*["\'][^"\']*[;\|&][^"\']*["\']',  # Command injection in keystroke
+        r'tell\s+application\s+["\']terminal["\']',  # Terminal access
+        r'activate\s+application\s+["\'][^"\']*[;\|&]',  # Application activation with injection
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, sanitized, re.IGNORECASE):
+            raise ValueError(f"Potentially dangerous AppleScript pattern detected: {pattern}")
+    
+    return sanitized
+
+
+def _execute_applescript_safely(script, timeout=5):
+    """
+    Execute AppleScript safely with proper error handling and security checks.
+    """
+    if not is_macos():
+        raise RuntimeError("AppleScript execution only supported on macOS")
+    
+    try:
+        # Sanitize the script
+        safe_script = _sanitize_applescript(script)
+        
+        # Execute with strict parameters
+        result = subprocess.run(
+            ['osascript', '-e', safe_script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False  # Don't raise on non-zero exit codes
+        )
+        
+        return result
+        
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"AppleScript execution timed out after {timeout} seconds")
+    except FileNotFoundError:
+        raise RuntimeError("osascript command not found - not running on macOS?")
+    except Exception as e:
+        raise RuntimeError(f"AppleScript execution failed: {e}")
 
 
 def check_accessibility_permissions():
@@ -41,16 +101,13 @@ def check_accessibility_permissions():
         end tell
         '''
         
-        result = subprocess.run(
-            ['osascript', '-e', applescript],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
+        result = _execute_applescript_safely(applescript, timeout=5)
         return result.stdout.strip() == "success"
         
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+    except (RuntimeError, ValueError) as e:
+        print(f"AppleScript execution error: {e}")
+        return False
+    except Exception:
         # If we can't run the check, assume permissions are needed
         return False
 

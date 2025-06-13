@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from pynput import keyboard
 import time
 import pyperclip
-from accessibility_utils import check_accessibility_permissions, get_accessibility_instructions, prompt_for_permissions
+from accessibility_utils import check_accessibility_permissions, get_accessibility_instructions, prompt_for_permissions, _execute_applescript_safely
 
 
 class TranscriptionService(ABC):
@@ -44,6 +44,15 @@ class TranscriptionService(ABC):
             print("No text to type")
             return
         
+        # Sanitize text to prevent clipboard issues
+        text = text.strip()
+        # Remove any null bytes or other problematic characters
+        text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\t')
+        
+        if not text:
+            print("No valid text after sanitization")
+            return
+        
         # Preserve original clipboard content
         original_clipboard = None
         try:
@@ -77,27 +86,44 @@ class TranscriptionService(ABC):
         try:
             print("Attempting verified clipboard + AppleScript paste...")
             
-            # Copy to clipboard and verify
-            pyperclip.copy(text)
-            time.sleep(0.05)  # Brief pause for clipboard update
-            
-            # Verify clipboard contents
-            clipboard_content = pyperclip.paste()
-            if clipboard_content == text:
-                print("✓ Clipboard verified successfully")
+            # Copy to clipboard and verify with retries
+            copy_success = False
+            for retry in range(3):
+                pyperclip.copy(text)
+                time.sleep(0.2)  # Longer pause for clipboard update
                 
+                # Verify clipboard contents
+                clipboard_content = pyperclip.paste()
+                if clipboard_content == text:
+                    print("✓ Clipboard verified successfully")
+                    copy_success = True
+                    break
+                else:
+                    print(f"✗ Clipboard verification failed (attempt {retry + 1}/3)")
+                    print(f"Expected: '{text[:50]}...' Got: '{clipboard_content[:50]}...'")
+                    time.sleep(0.1)
+            
+            if copy_success:
                 # Use AppleScript for reliable paste on macOS
-                import subprocess
-                applescript = '''
-                tell application "System Events"
-                    keystroke "v" using command down
-                end tell
-                '''
-                subprocess.run(['osascript', '-e', applescript], check=True, timeout=3)
-                print(f"✓ Pasted {len(text)} characters via AppleScript")
-                success = True
+                try:
+                    applescript = '''
+                    tell application "System Events"
+                        keystroke "v" using command down
+                    end tell
+                    '''
+                    result = _execute_applescript_safely(applescript, timeout=5)
+                    
+                    if result.returncode == 0:
+                        # Wait for paste to complete before proceeding
+                        time.sleep(0.3)
+                        print(f"✓ Pasted {len(text)} characters via AppleScript")
+                        success = True
+                    else:
+                        print(f"✗ AppleScript paste failed: {result.stderr}")
+                except (RuntimeError, ValueError) as e:
+                    print(f"✗ Secure AppleScript execution failed: {e}")
             else:
-                print("✗ Clipboard verification failed")
+                print("✗ Failed to reliably set clipboard content")
                 
         except Exception as e:
             print(f"AppleScript method failed: {e}")
@@ -107,26 +133,36 @@ class TranscriptionService(ABC):
             try:
                 print("Trying verified clipboard + PyKeyboard...")
                 
-                # Ensure clipboard is updated
-                pyperclip.copy(text)
-                time.sleep(0.05)
-                
-                # Verify clipboard
-                if pyperclip.paste() == text:
-                    print("✓ Clipboard verified for PyKeyboard")
+                # Ensure clipboard is updated with retries
+                copy_success = False
+                for retry in range(3):
+                    pyperclip.copy(text)
+                    time.sleep(0.2)
                     
+                    # Verify clipboard
+                    if pyperclip.paste() == text:
+                        print("✓ Clipboard verified for PyKeyboard")
+                        copy_success = True
+                        break
+                    else:
+                        print(f"✗ Clipboard verification failed for PyKeyboard (attempt {retry + 1}/3)")
+                        time.sleep(0.1)
+                
+                if copy_success:
                     # Use PyKeyboard with proper timing
                     self.pykeyboard.press(keyboard.Key.cmd)
-                    time.sleep(0.02)
+                    time.sleep(0.1)  # Longer timing
                     self.pykeyboard.press('v')
-                    time.sleep(0.02)
+                    time.sleep(0.1)
                     self.pykeyboard.release('v')
                     self.pykeyboard.release(keyboard.Key.cmd)
                     
+                    # Wait for paste to complete
+                    time.sleep(0.3)
                     print(f"✓ Pasted {len(text)} characters via PyKeyboard")
                     success = True
                 else:
-                    print("✗ Clipboard verification failed for PyKeyboard")
+                    print("✗ Failed to reliably set clipboard for PyKeyboard")
                     
             except Exception as e:
                 print(f"PyKeyboard method failed: {e}")
@@ -154,15 +190,31 @@ class TranscriptionService(ABC):
                 print(f"Manual input required: '{text}'")
                 print(f"Manual copy: {text}")
         
+        # Wait before restoring clipboard to ensure paste completed
+        if success:
+            time.sleep(0.5)  # Additional delay after paste completion
+        
         # Restore original clipboard content
         self._restore_clipboard(original_clipboard)
     
     def _restore_clipboard(self, original_content):
-        """Restore the original clipboard content"""
+        """Restore the original clipboard content with verification"""
         if original_content is not None:
             try:
-                pyperclip.copy(original_content)
-                print(f"✓ Restored original clipboard content ({len(original_content)} chars)")
+                # Restore with retries to ensure it takes
+                for retry in range(3):
+                    pyperclip.copy(original_content)
+                    time.sleep(0.1)
+                    
+                    # Verify restoration
+                    if pyperclip.paste() == original_content:
+                        print(f"✓ Restored original clipboard content ({len(original_content)} chars)")
+                        return
+                    else:
+                        print(f"Warning: Clipboard restoration failed (attempt {retry + 1}/3)")
+                        time.sleep(0.1)
+                
+                print("Warning: Failed to reliably restore original clipboard")
             except Exception as e:
                 print(f"Warning: Could not restore original clipboard: {e}")
         else:
@@ -217,18 +269,54 @@ class AWSTranscriptionService(TranscriptionService):
             if not credentials:
                 raise Exception("No AWS credentials found. Please configure AWS credentials using 'aws configure' or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.")
             
-            print(f"🔵 AWS TRANSCRIBE SERVICE: Using AWS credentials: {credentials.access_key[:8]}...")
+            print("🔵 AWS TRANSCRIBE SERVICE: AWS credentials loaded successfully")
             
-            # Set environment variables for the amazon-transcribe library
-            # This is required because amazon-transcribe doesn't automatically pick up boto3 credentials
-            os.environ['AWS_ACCESS_KEY_ID'] = credentials.access_key
-            os.environ['AWS_SECRET_ACCESS_KEY'] = credentials.secret_key
-            if credentials.token:
-                os.environ['AWS_SESSION_TOKEN'] = credentials.token
-            os.environ['AWS_DEFAULT_REGION'] = self.region_name
+            # Store credentials securely without exposing them in environment
+            # Pass credentials directly to the client instead of using environment variables
+            self.aws_credentials = {
+                'access_key': credentials.access_key,
+                'secret_key': credentials.secret_key,
+                'session_token': credentials.token if credentials.token else None
+            }
             
-            # Initialize TranscribeStreamingClient
-            self.transcribe_client = TranscribeStreamingClient(region=self.region_name)
+            # Initialize TranscribeStreamingClient with explicit credentials
+            # Note: This may require modification based on amazon-transcribe library API
+            try:
+                self.transcribe_client = TranscribeStreamingClient(
+                    region=self.region_name,
+                    aws_access_key_id=credentials.access_key,
+                    aws_secret_access_key=credentials.secret_key,
+                    aws_session_token=credentials.token
+                )
+            except TypeError:
+                # Fallback: Use environment variables temporarily only for this process
+                # Set them right before client creation and clear afterwards
+                original_env = {}
+                env_keys = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_DEFAULT_REGION']
+                
+                # Backup original environment
+                for key in env_keys:
+                    if key in os.environ:
+                        original_env[key] = os.environ[key]
+                
+                # Set credentials temporarily
+                os.environ['AWS_ACCESS_KEY_ID'] = credentials.access_key
+                os.environ['AWS_SECRET_ACCESS_KEY'] = credentials.secret_key
+                if credentials.token:
+                    os.environ['AWS_SESSION_TOKEN'] = credentials.token
+                os.environ['AWS_DEFAULT_REGION'] = self.region_name
+                
+                try:
+                    self.transcribe_client = TranscribeStreamingClient(region=self.region_name)
+                finally:
+                    # Clear AWS credentials from environment immediately
+                    for key in ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']:
+                        if key in os.environ:
+                            del os.environ[key]
+                    
+                    # Restore original environment
+                    for key, value in original_env.items():
+                        os.environ[key] = value
             print(f"🔵 AWS TRANSCRIBE SERVICE: Initialized with region {self.region_name}")
             
         except ImportError as e:

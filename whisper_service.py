@@ -72,42 +72,89 @@ class WhisperService:
             raise SingleInstanceException("Another instance is already running")
             
     def kill_all_whisper_processes(self):
-        """Kill all existing whisper processes"""
-        killed_pids = []
-        for proc in psutil.process_iter(['pid', 'cmdline']):
-            try:
-                if proc.info['cmdline']:
-                    cmdline_str = ' '.join(proc.info['cmdline'])
-                    if ('whisper_dictation.py' in cmdline_str or 
-                        'whisper_service.py' in cmdline_str) and proc.info['pid'] != os.getpid():
-                        print(f"Killing existing whisper process PID: {proc.info['pid']}")
-                        psutil.Process(proc.info['pid']).kill()
-                        killed_pids.append(proc.info['pid'])
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+        """Kill all existing whisper processes with proper synchronization"""
+        import threading
         
-        # Wait for all killed processes to actually terminate
-        if killed_pids:
-            print(f"Killed {len(killed_pids)} existing whisper processes")
-            max_wait = 10  # Maximum wait time in seconds
-            start_time = time.time()
+        # Use a lock to prevent multiple concurrent cleanup operations
+        if not hasattr(self, '_cleanup_lock'):
+            self._cleanup_lock = threading.Lock()
+        
+        with self._cleanup_lock:
+            print("Starting process cleanup with lock acquired...")
+            killed_pids = []
             
-            while killed_pids and (time.time() - start_time) < max_wait:
-                still_running = []
-                for pid in killed_pids:
-                    try:
-                        if psutil.pid_exists(pid):
-                            still_running.append(pid)
-                    except:
-                        pass
-                killed_pids = still_running
-                if killed_pids:
-                    time.sleep(0.5)
-            
+            # First pass: identify and terminate processes
+            for proc in psutil.process_iter(['pid', 'cmdline']):
+                try:
+                    if proc.info['cmdline']:
+                        cmdline_str = ' '.join(proc.info['cmdline'])
+                        if ('whisper_dictation.py' in cmdline_str or 
+                            'whisper_service.py' in cmdline_str) and proc.info['pid'] != os.getpid():
+                            print(f"Terminating existing whisper process PID: {proc.info['pid']}")
+                            
+                            try:
+                                # Try graceful termination first
+                                proc_obj = psutil.Process(proc.info['pid'])
+                                proc_obj.terminate()
+                                killed_pids.append(proc.info['pid'])
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                    pass
+        
+            # Wait for all terminated processes to actually exit
             if killed_pids:
-                print(f"Warning: {len(killed_pids)} processes still running after cleanup")
-            else:
-                print("All processes successfully terminated")
+                print(f"Terminated {len(killed_pids)} existing whisper processes")
+                max_wait = 10  # Wait for graceful termination
+                start_time = time.time()
+                
+                # Wait for graceful termination
+                while killed_pids and (time.time() - start_time) < max_wait:
+                    still_running = []
+                    for pid in killed_pids:
+                        try:
+                            proc = psutil.Process(pid)
+                            if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                                still_running.append(pid)
+                        except psutil.NoSuchProcess:
+                            # Process has exited - good
+                            pass
+                        except:
+                            # Assume it's gone if we can't check
+                            pass
+                    killed_pids = still_running
+                    if killed_pids:
+                        time.sleep(0.5)  # Check more frequently
+                
+                # Force kill any remaining processes
+                if killed_pids:
+                    print(f"Force killing {len(killed_pids)} stubborn processes...")
+                    for pid in killed_pids:
+                        try:
+                            proc = psutil.Process(pid)
+                            proc.kill()  # SIGKILL
+                            print(f"Force killed stubborn process PID: {pid}")
+                        except psutil.NoSuchProcess:
+                            pass
+                        except Exception as e:
+                            print(f"Failed to force kill PID {pid}: {e}")
+                    
+                    # Final verification
+                    time.sleep(2)
+                    final_check = []
+                    for pid in killed_pids:
+                        try:
+                            if psutil.Process(pid).is_running():
+                                final_check.append(pid)
+                        except psutil.NoSuchProcess:
+                            pass
+                    
+                    if final_check:
+                        print(f"WARNING: {len(final_check)} processes still running after force kill: {final_check}")
+                    else:
+                        print("All processes successfully terminated")
+                else:
+                    print("All processes terminated gracefully")
         
     def setup_signal_handlers(self):
         """Set up handlers for graceful shutdown"""
@@ -228,13 +275,28 @@ class WhisperService:
             )
             print(f"Started Whisper process with PID: {self.process.pid}")
             
-            # Give the process some time to load initially
-            print("Waiting for model to load...")
-            time.sleep(10) # Reduced delay for faster startup
+            # Give the process some time to load initially and acquire its lock
+            print("Waiting for model to load and lock acquisition...")
+            time.sleep(15)  # Increased delay to ensure proper initialization
             
             if self.process.poll() is not None:
                 print(f"Process exited early with code: {self.process.poll()}")
                 return False
+                
+            # Verify the process actually acquired its lock file
+            lock_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.whisper_dictation.lock')
+            if os.path.exists(lock_file):
+                try:
+                    with open(lock_file, 'r') as f:
+                        lock_pid = int(f.read().strip())
+                    if lock_pid == self.process.pid:
+                        print("Service ready - lock acquired successfully")
+                    else:
+                        print(f"Warning: Lock file shows different PID {lock_pid}, expected {self.process.pid}")
+                except:
+                    print("Warning: Could not verify lock file")
+            else:
+                print("Warning: Lock file not found - process may not have started properly")
                 
             print("Service ready")
             return True

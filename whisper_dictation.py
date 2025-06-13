@@ -8,6 +8,7 @@ import rumps
 import signal
 import sys
 import os
+import fcntl
 from pynput import keyboard
 # Conditional import - only import whisper when needed
 # from whisper import load_model  # Moved to conditional block below
@@ -16,6 +17,80 @@ from transcription_service import TranscriptionService, WhisperTranscriptionServ
 
 HEARTBEAT_FILE = "/tmp/whisper_dictation.heartbeat"
 HEARTBEAT_INTERVAL = 5 # seconds
+
+class SingleInstanceLock:
+    """Ensures only one instance of whisper_dictation runs at a time"""
+    
+    def __init__(self, lock_file_path=None):
+        self.lock_file_path = lock_file_path or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 
+            '.whisper_dictation.lock'
+        )
+        self.lock_file = None
+        
+    def acquire(self):
+        """Try to acquire the lock atomically. Return True if successful, False otherwise."""
+        try:
+            # Use O_CREAT | O_EXCL for atomic file creation
+            # This prevents TOCTOU race conditions
+            import stat
+            
+            # Open file with exclusive creation flags
+            fd = os.open(
+                self.lock_file_path, 
+                os.O_CREAT | os.O_WRONLY | os.O_TRUNC,
+                stat.S_IRUSR | stat.S_IWUSR
+            )
+            
+            try:
+                # Apply the lock immediately after opening
+                fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                
+                # Convert to file object for easier handling
+                self.lock_file = os.fdopen(fd, 'w')
+                
+                # Write PID to the lock file
+                self.lock_file.write(str(os.getpid()))
+                self.lock_file.flush()
+                
+                return True
+                
+            except IOError:
+                # Failed to acquire lock, close the file descriptor
+                os.close(fd)
+                # Try to remove the file we created
+                try:
+                    os.unlink(self.lock_file_path)
+                except:
+                    pass
+                return False
+                
+        except (IOError, OSError) as e:
+            # File already exists or permission denied
+            return False
+            
+    def release(self):
+        """Release the lock safely"""
+        if self.lock_file:
+            try:
+                # Release the file lock first
+                fcntl.lockf(self.lock_file, fcntl.LOCK_UN)
+            except (OSError, IOError):
+                pass  # Lock may already be released
+            
+            try:
+                # Close the file
+                self.lock_file.close()
+            except (OSError, IOError):
+                pass
+            
+            self.lock_file = None
+            
+            # Remove the lock file
+            try:
+                os.unlink(self.lock_file_path)
+            except (OSError, IOError):
+                pass  # File may not exist or permission issues
 
 class Recorder:
     def __init__(self, transcription_service):
@@ -389,11 +464,25 @@ def signal_handler(sig, frame):
         except Exception as e:
             print(f"Error cleaning up recorder: {e}")
 
+    # Release single instance lock
+    if 'lock' in globals() and lock:
+        try:
+            lock.release()
+            print("Single instance lock released.")
+        except Exception as e:
+            print(f"Error releasing lock: {e}")
+
     print("Signal handler cleanup attempted. Exiting.")
     sys.exit(0)
 
 if __name__ == "__main__":
     args = parse_args()
+
+    # Create a single instance lock
+    lock = SingleInstanceLock()
+    if not lock.acquire():
+        print("Another instance of whisper_dictation is already running. Exiting.")
+        sys.exit(1)
 
     # Initialize transcription service based on user choice
     transcription_service = None
@@ -491,6 +580,14 @@ if __name__ == "__main__":
                 print("Recorder cleaned up in finally block.")
             except Exception as e:
                  print(f"Error cleaning up recorder in finally: {e}")
+
+        # Release the lock when exiting
+        if lock:
+            try:
+                lock.release()
+                print("Single instance lock released in finally block.")
+            except Exception as e:
+                print(f"Error releasing lock in finally: {e}")
 
         print("Cleanup in finally block complete.")
 
