@@ -83,13 +83,47 @@ class WhisperService:
             print("Starting process cleanup with lock acquired...")
             killed_pids = []
             
-            # First pass: identify and terminate processes
+            # First, check for existing dictation processes by lock file
+            lock_file_path = os.path.join(self.whisper_dir, '.whisper_dictation.lock')
+            if os.path.exists(lock_file_path):
+                try:
+                    with open(lock_file_path, 'r') as f:
+                        locked_pid = int(f.read().strip())
+                    
+                    if psutil.pid_exists(locked_pid):
+                        try:
+                            proc = psutil.Process(locked_pid)
+                            cmdline = ' '.join(proc.cmdline())
+                            if 'whisper_dictation.py' in cmdline:
+                                print(f"Found existing whisper_dictation process PID: {locked_pid} (from lock file)")
+                                proc.terminate()
+                                killed_pids.append(locked_pid)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    
+                    # Remove the lock file
+                    os.unlink(lock_file_path)
+                    print("Removed existing lock file")
+                except (ValueError, IOError, OSError):
+                    # Corrupted lock file, remove it
+                    try:
+                        os.unlink(lock_file_path)
+                        print("Removed corrupted lock file")
+                    except:
+                        pass
+            
+            # Second pass: identify and terminate any remaining processes
             for proc in psutil.process_iter(['pid', 'cmdline']):
                 try:
                     if proc.info['cmdline']:
                         cmdline_str = ' '.join(proc.info['cmdline'])
                         if ('whisper_dictation.py' in cmdline_str or 
                             'whisper_service.py' in cmdline_str) and proc.info['pid'] != os.getpid():
+                            
+                            # Skip if we already handled this PID
+                            if proc.info['pid'] in killed_pids:
+                                continue
+                                
                             print(f"Terminating existing whisper process PID: {proc.info['pid']}")
                             
                             try:
@@ -249,6 +283,25 @@ class WhisperService:
         return True
 
     def start_process(self) -> bool:
+        # Double-check: ensure no whisper_dictation process is already running
+        lock_file_path = os.path.join(self.whisper_dir, '.whisper_dictation.lock')
+        if os.path.exists(lock_file_path):
+            try:
+                with open(lock_file_path, 'r') as f:
+                    existing_pid = int(f.read().strip())
+                
+                if psutil.pid_exists(existing_pid):
+                    try:
+                        proc = psutil.Process(existing_pid)
+                        cmdline = ' '.join(proc.cmdline())
+                        if 'whisper_dictation.py' in cmdline:
+                            print(f"Whisper dictation process already running with PID: {existing_pid}")
+                            return False
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except (ValueError, IOError, OSError):
+                pass
+        
         # Construct the command as a list for direct execution
         python_executable = os.path.join(self.venv_dir, "bin", "python")
         whisper_script = os.path.join(self.whisper_dir, "whisper_dictation.py")

@@ -35,10 +35,46 @@ class SingleInstanceLock:
             # This prevents TOCTOU race conditions
             import stat
             
+            # First, check if an existing lock file belongs to a dead process
+            if os.path.exists(self.lock_file_path):
+                try:
+                    with open(self.lock_file_path, 'r') as f:
+                        old_pid = int(f.read().strip())
+                    
+                    # Check if the process with this PID is actually running
+                    import psutil
+                    if not psutil.pid_exists(old_pid):
+                        # Process is dead, remove stale lock file
+                        os.unlink(self.lock_file_path)
+                        print(f"Removed stale lock file for dead process PID {old_pid}")
+                    else:
+                        # Check if it's actually a whisper_dictation process
+                        try:
+                            proc = psutil.Process(old_pid)
+                            cmdline = ' '.join(proc.cmdline())
+                            if 'whisper_dictation.py' not in cmdline:
+                                # Lock file belongs to different process, remove it
+                                os.unlink(self.lock_file_path)
+                                print(f"Removed lock file for non-whisper process PID {old_pid}")
+                            else:
+                                # Valid whisper process running, can't acquire lock
+                                return False
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            # Process doesn't exist or can't access it, remove lock
+                            os.unlink(self.lock_file_path)
+                            print(f"Removed inaccessible lock file for PID {old_pid}")
+                except (ValueError, IOError, OSError):
+                    # Corrupted or inaccessible lock file, remove it
+                    try:
+                        os.unlink(self.lock_file_path)
+                        print("Removed corrupted lock file")
+                    except:
+                        pass
+            
             # Open file with exclusive creation flags
             fd = os.open(
                 self.lock_file_path, 
-                os.O_CREAT | os.O_WRONLY | os.O_TRUNC,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                 stat.S_IRUSR | stat.S_IWUSR
             )
             
