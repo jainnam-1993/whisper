@@ -11,7 +11,16 @@
       "Bash(git add:*)",
       "Bash(pbpaste)",
       "Bash(git push:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git commit:*)",
+      "Bash(osascript:*)",
+      "Bash(system_profiler:*)",
+      "Bash(pgrep:*)",
+      "Bash(cat:*)",
+      "Bash(ps:*)",
+      "Bash(grep:*)",
+      "Bash(crontab:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }
