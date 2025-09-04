@@ -302,8 +302,9 @@ class WhisperService:
             except (ValueError, IOError, OSError):
                 pass
         
-        # Construct the command as a list for direct execution
-        python_executable = os.path.join(self.venv_dir, "bin", "python")
+        # Construct the command as a list for direct execution  
+        # Always use venv Python to ensure dependencies are available
+        python_executable = "/Volumes/workplace/tools/whisper/.venv/bin/python3"
         whisper_script = os.path.join(self.whisper_dir, "whisper_dictation.py")
         
         # Use local Whisper model with double-cmd key listener

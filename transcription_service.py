@@ -84,7 +84,6 @@ class TranscriptionService(ABC):
         
         # Method 1: Verified clipboard + AppleScript paste (most reliable)
         try:
-            print("Attempting verified clipboard + AppleScript paste...")
             
             # Copy to clipboard and verify with retries
             copy_success = False
@@ -95,35 +94,25 @@ class TranscriptionService(ABC):
                 # Verify clipboard contents
                 clipboard_content = pyperclip.paste()
                 if clipboard_content == text:
-                    print("✓ Clipboard verified successfully")
                     copy_success = True
                     break
                 else:
-                    print(f"✗ Clipboard verification failed (attempt {retry + 1}/3)")
-                    print(f"Expected: '{text[:50]}...' Got: '{clipboard_content[:50]}...'")
                     time.sleep(0.1)
             
             if copy_success:
                 # Use AppleScript for reliable paste on macOS
                 try:
-                    applescript = '''
-                    tell application "System Events"
-                        keystroke "v" using command down
-                    end tell
-                    '''
-                    result = _execute_applescript_safely(applescript, timeout=5)
+                    import subprocess
+                    applescript = 'tell application "System Events" to keystroke "v" using command down'
+                    result = subprocess.run(['osascript', '-e', applescript], 
+                                          capture_output=True, text=True, timeout=5)
                     
                     if result.returncode == 0:
                         # Wait for paste to complete before proceeding
                         time.sleep(0.3)
-                        print(f"✓ Pasted {len(text)} characters via AppleScript")
                         success = True
-                    else:
-                        print(f"✗ AppleScript paste failed: {result.stderr}")
-                except (RuntimeError, ValueError) as e:
-                    print(f"✗ Secure AppleScript execution failed: {e}")
-            else:
-                print("✗ Failed to reliably set clipboard content")
+                except Exception as e:
+                    pass
                 
         except Exception as e:
             print(f"AppleScript method failed: {e}")
@@ -131,7 +120,6 @@ class TranscriptionService(ABC):
         # Method 2: Verified clipboard + PyKeyboard (fallback)
         if not success:
             try:
-                print("Trying verified clipboard + PyKeyboard...")
                 
                 # Ensure clipboard is updated with retries
                 copy_success = False
@@ -141,28 +129,22 @@ class TranscriptionService(ABC):
                     
                     # Verify clipboard
                     if pyperclip.paste() == text:
-                        print("✓ Clipboard verified for PyKeyboard")
                         copy_success = True
                         break
                     else:
-                        print(f"✗ Clipboard verification failed for PyKeyboard (attempt {retry + 1}/3)")
                         time.sleep(0.1)
                 
                 if copy_success:
-                    # Use PyKeyboard with proper timing
+                    # Use PyKeyboard with corrected key sequence
                     self.pykeyboard.press(keyboard.Key.cmd)
-                    time.sleep(0.1)  # Longer timing
                     self.pykeyboard.press('v')
-                    time.sleep(0.1)
+                    time.sleep(0.1)  # Hold the combination
                     self.pykeyboard.release('v')
                     self.pykeyboard.release(keyboard.Key.cmd)
                     
                     # Wait for paste to complete
                     time.sleep(0.3)
-                    print(f"✓ Pasted {len(text)} characters via PyKeyboard")
                     success = True
-                else:
-                    print("✗ Failed to reliably set clipboard for PyKeyboard")
                     
             except Exception as e:
                 print(f"PyKeyboard method failed: {e}")
@@ -170,9 +152,7 @@ class TranscriptionService(ABC):
         # Method 3: Optimized typing (reliable fallback)
         if not success:
             try:
-                print("Using optimized typing fallback...")
                 self.pykeyboard.type(text)
-                print(f"✓ Typed {len(text)} characters")
                 success = True
                 
             except Exception as e:
@@ -182,8 +162,6 @@ class TranscriptionService(ABC):
         if not success:
             try:
                 pyperclip.copy(text)
-                print(f"⚠️  MANUAL PASTE REQUIRED: Text copied to clipboard")
-                print(f"Please paste manually with Cmd+V: '{text}'")
                 
             except Exception as e:
                 print(f"All methods failed: {e}")
@@ -208,17 +186,11 @@ class TranscriptionService(ABC):
                     
                     # Verify restoration
                     if pyperclip.paste() == original_content:
-                        print(f"✓ Restored original clipboard content ({len(original_content)} chars)")
                         return
                     else:
-                        print(f"Warning: Clipboard restoration failed (attempt {retry + 1}/3)")
                         time.sleep(0.1)
-                
-                print("Warning: Failed to reliably restore original clipboard")
             except Exception as e:
-                print(f"Warning: Could not restore original clipboard: {e}")
-        else:
-            print("No original clipboard content to restore")
+                pass
 
 
 class WhisperTranscriptionService(TranscriptionService):

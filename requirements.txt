@@ -9,5 +9,6 @@ boto3
 librosa
 
 amazon-transcribe
+psutil
 
 pyperclip
