@@ -5,10 +5,10 @@
     <key>Label</key>
     <string>com.whisper.service</string>
     <key>Program</key>
-    <string>/Volumes/workplace/tools/whisper/venv/bin/python</string>
+    <string>/Volumes/workplace/tools/whisper/.venv/bin/python3</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Volumes/workplace/tools/whisper/venv/bin/python</string>
+        <string>/Volumes/workplace/tools/whisper/.venv/bin/python3</string>
         <string>/Volumes/workplace/tools/whisper/whisper_service.py</string>
     </array>
     <key>RunAtLoad</key>
@@ -24,11 +24,9 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Volumes/workplace/tools/whisper/venv/bin</string>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/jainnam/.local/share/mise/installs/python/3.13.6/bin</string>
         <key>PYTHONPATH</key>
         <string>/Volumes/workplace/tools/whisper</string>
-        <key>VIRTUAL_ENV</key>
-        <string>/Volumes/workplace/tools/whisper/venv</string>
     </dict>
 </dict>
 </plist> 

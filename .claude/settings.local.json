@@ -20,7 +20,20 @@
       "Bash(ps:*)",
       "Bash(grep:*)",
       "Bash(crontab:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python:*)",
+      "Bash(git clone:*)",
+      "Bash(/Volumes/workplace/tools/whisper/.venv/bin/python3 -c \"import pyaudio; print(''pyaudio OK'')\")",
+      "Bash(mv:*)",
+      "Bash(open:*)",
+      "Bash(/Volumes/workplace/tools/whisper/.venv/bin/python3:*)",
+      "Bash(sudo dtruss:*)",
+      "Bash(true)",
+      "Bash(cp:*)",
+      "WebFetch(domain:github.com)",
+      "mcp__perplexity__search",
+      "WebSearch",
+      "mcp__perplexity__deep_research"
     ],
     "deny": []
   }

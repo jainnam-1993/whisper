@@ -1,4 +1,27 @@
 #!/usr/bin/env python3
+"""
+Host-side key listener for whisper dictation.
+Listens for double Right Command press to trigger transcription.
+"""
+
+# Configuration - Change backend here (no code deletion)
+CONFIG = {
+    "transcription_backend": "realtimestt",  # Options: "docker", "realtimestt" 
+    "model_name": "base",
+    "language": "en",
+    # Keep all existing Docker settings for reversion
+    "docker": {
+        "container_name": "whisper-dictation",
+        "min_recording_time": 3.0
+    },
+    # New RealtimeSTT settings
+    "realtimestt": {
+        "enable_realtime": False,
+        "pre_buffer_duration": 1.0,
+        "vad_sensitivity": 0.4
+    }
+}
+
 import time
 import os
 import subprocess
@@ -154,6 +177,86 @@ class ClipboardManager:
             print(f"Error pasting from clipboard: {e}")
             traceback.print_exc()
             return False
+
+class RealtimeSTTCommunicator:
+    """RealtimeSTT backend - same interface as DockerCommunicator"""
+    
+    def __init__(self, model="base", language="en", settings=None):
+        try:
+            from realtimestt_wrapper import RealtimeSTTWrapper
+            self.transcription_service = RealtimeSTTWrapper(model=model, language=language)
+        except ImportError as e:
+            print(f"Warning: RealtimeSTT not available: {e}")
+            print("Falling back to Docker backend")
+            raise
+            
+        self.clipboard = ClipboardManager()  # Reuse existing clipboard manager
+        self.is_transcribing = False
+        self.settings = settings or {}
+        
+    def start_recording(self):
+        """Same interface as DockerCommunicator - drop-in replacement"""
+        if self.is_transcribing:
+            return
+            
+        self.is_transcribing = True
+        print("🎙️ Starting RealtimeSTT transcription...")
+        
+        try:
+            # Use RealtimeSTT backend with continuous listening
+            transcription = self.transcription_service.transcribe()
+            
+            if transcription and transcription.strip():
+                print(f"Transcription: {transcription}")
+                
+                # Keep exact same clipboard workflow as Docker version
+                self.clipboard.preserve_clipboard()
+                
+                if self.clipboard.copy_to_clipboard(transcription):
+                    print("Text copied to clipboard")
+                    time.sleep(0.5)
+                    
+                    if self.clipboard.paste_from_clipboard():
+                        print("Text pasted from clipboard")
+                        time.sleep(0.5)
+                        self.clipboard.restore_clipboard()
+                    else:
+                        print("Failed to paste - please paste manually (Cmd+V)")
+                else:
+                    print("Failed to copy text to clipboard")
+            else:
+                print("No transcription result received")
+                
+        except Exception as e:
+            print(f"RealtimeSTT transcription error: {e}")
+            
+        finally:
+            self.is_transcribing = False
+    
+    def stop_recording(self):
+        """Same interface as DockerCommunicator"""
+        # RealtimeSTT handles stop internally
+        pass
+
+class TranscriptionBackendFactory:
+    """Factory for creating transcription backends based on configuration"""
+    
+    @staticmethod
+    def create_backend(config):
+        backend_type = config.get("transcription_backend", "docker")
+        
+        if backend_type == "realtimestt":
+            return RealtimeSTTCommunicator(
+                model=config.get("model_name", "base"),
+                language=config.get("language", "en"),
+                settings=config.get("realtimestt", {})
+            )
+        elif backend_type == "docker":
+            return DockerCommunicator(
+                container_name=config["docker"]["container_name"]
+            )
+        else:
+            raise ValueError(f"Unknown backend type: {backend_type}")
 
 class DockerCommunicator:
     def __init__(self, container_name="whisper-dictation"):
@@ -383,8 +486,9 @@ def main():
             print("Double-press Right Command to start recording")
             print("Single-press Right Command while recording to stop and transcribe")
             
-            docker_communicator = DockerCommunicator()
-            key_listener = DoubleCommandKeyListener(docker_communicator)
+            # Create backend based on configuration (no if-else needed)
+            communicator = TranscriptionBackendFactory.create_backend(CONFIG)
+            key_listener = DoubleCommandKeyListener(communicator)
             
             # Start the keyboard listener
             listener = keyboard.Listener(
