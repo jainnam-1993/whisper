@@ -155,7 +155,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 # CORRECTED: Valid RealtimeSTT VAD parameters only
                 silero_sensitivity=0.4,             # Balanced sensitivity  
                 webrtc_sensitivity=2,               # Less aggressive WebRTC
-                post_speech_silence_duration=1.0,   # 1 second silence to stop
+                post_speech_silence_duration=2.0,   # 2 seconds silence to stop
                 min_length_of_recording=0.3,        # Minimum 300ms recording
                 min_gap_between_recordings=0.5,     # 500ms gap between recordings
                 
