@@ -152,10 +152,10 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 on_realtime_transcription_update=self._on_realtime_update,
                 on_realtime_transcription_stabilized=self._on_stabilized_update,
                 
-                # CORRECTED: Valid RealtimeSTT VAD parameters only
-                silero_sensitivity=0.4,             # Balanced sensitivity  
-                webrtc_sensitivity=2,               # Less aggressive WebRTC
-                post_speech_silence_duration=3.0,   # 3 seconds silence to stop
+                # LESS SENSITIVE: Better silence detection 
+                silero_sensitivity=0.6,             # Higher threshold = less sensitive to noise
+                webrtc_sensitivity=3,               # Even less aggressive WebRTC
+                post_speech_silence_duration=2.0,   # 2 seconds silence to stop
                 min_length_of_recording=0.3,        # Minimum 300ms recording
                 min_gap_between_recordings=0.5,     # 500ms gap between recordings
                 
@@ -187,10 +187,10 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                     spinner=False,
                     enable_realtime_transcription=False,
                     
-                    # Same updated VAD settings for fallback
-                    silero_sensitivity=0.4,
-                    webrtc_sensitivity=2,
-                    post_speech_silence_duration=3.0,
+                    # Same less sensitive VAD settings for fallback
+                    silero_sensitivity=0.6,
+                    webrtc_sensitivity=3,
+                    post_speech_silence_duration=2.0,
                     min_length_of_recording=0.3,
                     min_gap_between_recordings=0.5,
                     

@@ -186,10 +186,11 @@ class RealtimeSTTCommunicator:
         settings = settings or {}
         try:
             from realtimestt_wrapper import RealtimeSTTWrapper
+            # For keyboard trigger: use direct recording (no wake words)
             self.transcription_service = RealtimeSTTWrapper(
                 model=model, 
                 language=language,
-                wake_words=settings.get("wake_words"),
+                wake_words=None,  # Force no wake words for keyboard trigger
                 enable_realtime=settings.get("enable_realtime", False),
                 pre_buffer_duration=settings.get("pre_buffer_duration", 1.0)
             )
@@ -209,10 +210,8 @@ class RealtimeSTTCommunicator:
             
         self.is_transcribing = True
         
-        if self.settings.get("wake_words"):
-            print(f"🗣️ Say '{self.settings.get('wake_words')}' then speak...")
-        else:
-            print("🎙️ Starting RealtimeSTT transcription...")
+        # Keyboard trigger always does direct recording
+        print("🎙️ Starting direct RealtimeSTT recording...")
         
         try:
             # Use RealtimeSTT backend with continuous listening
@@ -258,10 +257,14 @@ class TranscriptionBackendFactory:
         backend_type = config.get("transcription_backend", "docker")
         
         if backend_type == "realtimestt":
+            # For keyboard trigger, remove wake words (direct recording)
+            keyboard_settings = config.get("realtimestt", {}).copy()
+            keyboard_settings.pop("wake_words", None)  # Remove wake words for keyboard
+            
             return RealtimeSTTCommunicator(
                 model=config.get("model_name", "base"),
                 language=config.get("language", "en"),
-                settings=config.get("realtimestt", {})
+                settings=keyboard_settings
             )
         elif backend_type == "docker":
             return DockerCommunicator(
@@ -414,11 +417,18 @@ class DoubleCommandKeyListener:
         
     def on_key_press(self, key):
         try:
+            # Debug: Log all right command key presses
+            if key == self.key:
+                print(f"🔍 DEBUG: Right Command key pressed at {time.time()}")
             if key == self.key:
                 current_time = time.time()
+                time_diff = current_time - self.last_press_time
+                
+                print(f"🔍 DEBUG: Time since last press: {time_diff:.3f}s, is_transcribing: {self.communicator.is_transcribing}")
                 
                 # If not recording and double-pressed (within 0.5 seconds)
-                if not self.communicator.is_transcribing and current_time - self.last_press_time < 0.5:
+                if not self.communicator.is_transcribing and time_diff < 0.5 and time_diff > 0:
+                    print("✅ Double command detected - starting recording!")
                     self.communicator.start_recording()
                 # If recording and single pressed - stop recording
                 elif self.communicator.is_transcribing:
