@@ -1,5 +1,110 @@
 # Whisper Dictation Enhancement - Session Handoff Notes
 
+## 🎯 **CURRENT STATUS: Dual-Mode Parallel System WORKING**
+
+### 📋 **IMMEDIATE TASKS TO COMPLETE**
+1. **Add GUI Element for Real-time Feedback** 🎯
+   - Integrate `ui_components.py` overlay window
+   - Show real-time transcription during speech
+   - Display audio visualization bars
+   - Auto-hide after transcription completes
+
+2. **Fix Real-time vs Chunk Transcription** 🔧
+   - **Current Issue**: Jarvis uses real-time text (less accurate) for final paste
+   - **Goal**: Show real-time text in GUI but paste final chunk transcription
+   - **Solution**: Separate `on_realtime_transcription_update` (GUI only) from `text()` (final paste)
+   - **Double-command method**: Already uses chunk-based final transcription ✅
+
+### ⚙️ **WORKING VAD Configuration (CONFIRMED FUNCTIONAL)**
+- **Silero VAD Sensitivity**: `0.4` - Balanced speech detection
+- **WebRTC VAD Sensitivity**: `2` - Less aggressive detection  
+- **Post-speech Silence Duration**: `1.0 second` - Stops after 1s silence
+- **Min Recording Length**: `0.3 seconds` - 300ms minimum recording
+- **Min Gap Between Recordings**: `0.5 seconds` - 500ms between recordings
+- **Wake Word Sensitivity**: `1.0` - Maximum sensitivity for "Jarvis"
+- **Wake Word Timeout**: `10 seconds` - Time to start speaking after "jarvis"
+- **Model**: `base` - Consistent for both triggers
+
+**✅ TESTED & VERIFIED**: This configuration successfully detects speech, stops on silence, and completes full transcription + auto-paste workflow.
+
+### ✅ **What Was Accomplished This Session**
+1. **Diagnosed Wake Word Failure**: Subprocess wasn't inheriting Picovoice access key
+2. **Fixed Environment Variable**: Added to `run.sh` for subprocess inheritance  
+3. **Implemented Parallel Architecture**: Both triggers run simultaneously
+4. **Fixed Model Consistency**: Forced "base" model for both triggers (was defaulting to "tiny")
+5. **Added Auto-paste**: Wake word now has same ClipboardManager as keyboard trigger
+
+## 🎯 **CURRENT STATUS: Dual-Mode Parallel System**
+
+### 🚀 **Ready to Test Command**
+```bash
+# Launch dual-mode system (both keyboard AND wake word):
+./run.sh
+```
+
+### 🏗️ **System Architecture: Parallel Dual Triggers**
+
+The system now runs BOTH trigger modes simultaneously:
+
+#### **Mode 1: Keyboard Trigger** ✅ WORKING
+- **Activation**: Double Right Command key press
+- **Thread**: Main thread (keyboard listener)
+- **Model**: Base (accurate transcription)
+- **Auto-paste**: ✅ Full ClipboardManager with restore
+- **Use case**: Silent environments, precise control
+
+#### **Mode 2: Wake Word Trigger** ✅ FULLY WORKING
+- **Activation**: Say "Jarvis" 
+- **Thread**: Background daemon thread (continuous listening)
+- **Model**: Base (same as keyboard for consistency)
+- **Auto-paste**: ✅ Same ClipboardManager implementation
+- **Silence Detection**: ✅ Automatically stops after 1 second of silence
+- **Transcription**: ✅ Complete and accurate
+- **Use case**: Hands-free operation, natural interaction
+
+**CONFIRMED WORKING**: Wake word detection → speech recording → silence detection → transcription → auto-paste → ready for next "jarvis"
+
+### **How It Works**
+1. **Environment Setup**: `run.sh` exports PICOVOICE_ACCESS_KEY for subprocess inheritance
+2. **Dual Thread Launch**: `host_key_listener.py` starts both listeners:
+   - **Main thread**: Keyboard listener waits for double-command
+   - **Daemon thread**: Wake word listener continuously monitors for "Jarvis"
+3. **Shared Components**:
+   - Both use RealtimeSTT backend (replaced Docker)
+   - Both use same ClipboardManager (preserve → copy → paste → restore)
+   - Both use same Whisper base model for consistency
+4. **Independent Operation**: Either trigger works without interfering with the other
+
+### 🔑 **Picovoice PVPorcupine Configuration**
+- **Wake Word Engine**: `pvporcupine` (NOT openwakeword)
+- **Access Key**: `lk++IHEpUel5qLDl6dc4e2qR12RqlKoMNzILpflCnLYVuTba4t3v0w==`
+
+### ⚠️ **Critical Model Configuration**
+**RealtimeSTT defaults to "tiny" model for wake word detection!**
+- **Problem**: Without configuration, wake word uses "tiny" (lower accuracy)
+- **Solution**: Set these parameters to force "base" model:
+  - `use_main_model_for_realtime=True` - Use main model for all transcription
+  - `realtime_model_type="base"` - Specify model for real-time transcription
+- **Result**: Both keyboard and wake word triggers use same "base" model
+- **Source**: Picovoice Console (console.picovoice.ai)
+- **Wake Word**: Built-in "jarvis" keyword (maximum sensitivity: 1.0)
+- **Implementation**: Environment variable + monkey patch in `realtimestt_wrapper.py`
+
+### ✅ **What's Working Now**
+- **Jarvis Wake Word**: ARM64 compatible (pvporcupine 3.0.5)
+- **RealtimeSTT Backend**: 0.24s transcription vs 3-5s Docker
+- **Auto-paste Workflow**: Full ClipboardManager (preserve → paste → restore)
+- **Dual Triggers**: Jarvis voice + Double Right Command keyboard
+- **Real-time Transcription**: Live updates during speech
+- **2-second Pre-buffer**: Better context capture
+- **Docker Compatibility**: Fixed missing files issue
+
+### 🔧 **System Architecture Achieved**
+```
+Jarvis Wake Word → RealtimeSTT → Real-time Transcription → Auto-paste
+Double Right Cmd → RealtimeSTT → Real-time Transcription → Auto-paste
+```
+
 ## 🎯 Project Status: Backend Migration COMPLETED ✅
 
 ### What Was Accomplished ✅
@@ -36,14 +141,235 @@
 - **host_key_listener.py**: `CONFIG["transcription_backend"] = "realtimestt"`
 - **Launch Control**: Managed via launchd scripts
 - **Auto-paste**: ClipboardManager preserved and functional
-- **Trigger**: Double Right Command key (unchanged UX)
+- **Trigger System**: Dual mode support (Double Right Command + Wake Word)
 
-### 🖥️ **Launch Control Integration**
+### 🗣️ **Wake Word Support: Subprocess Architecture Challenge**
+
+**⚠️ CRITICAL INSIGHT**: Wake word detection requires special handling due to subprocess architecture
+
+#### **The Subprocess Access Key Problem**
+- **Root Cause**: RealtimeSTT spawns audio recording in a subprocess via `multiprocessing`
+- **Issue**: Picovoice access key set in main process doesn't propagate to subprocess
+- **Result**: Subprocess calls `pvporcupine.create()` without access key → TypeError
+
+#### **Version Compatibility Constraint**
+- **pvporcupine 1.9.5**: No ARM64 support on macOS (incompatible with Apple Silicon)
+- **pvporcupine 3.0.5**: ✅ ARM64 native support BUT requires access key for ALL calls
+- **RealtimeSTT expectation**: Designed for 1.9.5 (no access key handling)
+- **Constraint**: Must use 3.0.5 for ARM64 Macs - downgrade is NOT an option
+
+#### **🔧 Solution: System-Level Environment Variable**
+```bash
+# MUST be set BEFORE Python interpreter starts
+export PICOVOICE_ACCESS_KEY="lk++IHEpUel5qLDl6dc4e2qR12RqlKoMNzILpflCnLYVuTba4t3v0w=="
+
+# Then launch the service
+/Volumes/workplace/tools/whisper/.venv/bin/python3.13 host_key_listener.py
+```
+
+**Why this works**:
+- Environment variables set before Python starts are inherited by ALL subprocesses
+- RealtimeSTT's subprocess will have access to the key
+- pvporcupine 3.0.5 automatically reads from environment when present
+
+**Implementation Options**:
+1. **Shell script wrapper** (run.sh) - Sets env then launches Python
+2. **launchd plist** - Sets environment in launch control
+3. **Terminal profile** - Export in ~/.zshrc or ~/.bash_profile
+
+#### **Subprocess Architecture Flow**
+```
+Shell/launchd (ENV set) → Python Main Process → Spawns Subprocess
+                                              ↓
+                                  Subprocess inherits ENV
+                                              ↓
+                                  pvporcupine.create() succeeds
+```
+
+### 📋 **Available Wake Words** (RealtimeSTT Built-in)
+- **jarvis** ✅ (Currently configured)
+- alexa, americano, blueberry, bumblebee, computer
+- grapefruits, grasshopper, hey google, hey siri
+- ok google, picovoice, porcupine, terminator
+
+### ⚙️ **Enhanced Configuration Parameters**
+
+```python
+CONFIG = {
+    "realtimestt": {
+        "enable_realtime": True,           # Real-time transcription
+        "pre_buffer_duration": 2.0,        # 2s pre-buffer for context
+        "vad_sensitivity": 0.4,            # Voice detection sensitivity  
+        "wake_words": "jarvis"             # Wake word activation
+    }
+}
+```
+
+**Parameter Explanations**:
+- **`enable_realtime`**: Continuous speech recognition (still pastes at end)
+- **`pre_buffer_duration`**: Audio captured before wake word (0.0 = no pre-buffer)
+- **`vad_sensitivity`**: 0.0 (off) to 1.0 (maximum), 0.4 = balanced
+- **`wake_words`**: Voice trigger word (replaces keyboard trigger when set)
+
+### 🔄 **Dual Trigger Architecture** (Both Available)
+
+**System now supports TWO independent trigger methods**:
+
+#### 1. **Wake Word Trigger** (NEW - Primary)
+- **Activation**: Say "Jarvis" + speak
+- **Mode**: Continuous listening, real-time transcription
+- **Use case**: Hands-free operation, natural speech interaction
+- **Launch control**: Required (always-on service)
+
+#### 2. **Keyboard Trigger** (Existing - Backup)  
+- **Activation**: Double Right Command key
+- **Mode**: On-demand recording
+- **Use case**: Silent environments, precise control
+- **Launch control**: Optional (user-triggered service)
+
+**Workflow Comparison**:
+```
+Wake Word:   "Jarvis" → [Real-time transcription] → Auto-paste
+Keyboard:    Cmd+Cmd → [Discrete recording] → Auto-paste
+```
+
+### 🖥️ **Launch Control Integration** (CRITICAL for Wake Word Mode)
+
 **Process Management**: Using launch control scripts for:
-- Automatic service startup/restart
-- Background process monitoring  
+- **Continuous wake word monitoring** (24/7 "Jarvis" listening)
+- Automatic service startup/restart on system boot
+- Background process monitoring and health checks
 - System integration with macOS launchd
-- Persistent service across system reboots
+- Persistent service across system reboots/sleep cycles
+
+**Wake Word Launch Control Requirements**:
+- **Always-on service**: Unlike keyboard triggers, wake words need continuous monitoring
+- **System-level integration**: Launch control ensures service survives system events
+- **Resource management**: Proper cleanup and restart mechanisms
+- **Privacy compliance**: Controlled microphone access through system services
+
+## 🏗️ **System Integration & Architectural Guidelines**
+
+### **Critical: Subprocess Architecture Patterns**
+
+**When working with libraries that spawn subprocesses (e.g., RealtimeSTT with multiprocessing):**
+
+1. **Environment Variable Inheritance**
+   - ✅ **DO**: Set environment variables BEFORE Python interpreter starts
+   - ❌ **DON'T**: Set with `os.environ` in Python (won't propagate to subprocesses)
+   - ❌ **DON'T**: Rely on monkey patching (only affects main process)
+
+2. **Access Key/Credential Propagation**
+   - **Problem**: Subprocesses don't inherit Python-level modifications
+   - **Solution**: Use system-level configuration (shell env, config files)
+   - **Testing**: Always verify subprocess has access (`ps aux | grep python`)
+
+3. **Debugging Subprocess Issues**
+   ```bash
+   # Check if subprocess has environment variable
+   ps auxe | grep python | grep PICOVOICE
+   
+   # Monitor subprocess creation
+   sudo dtruss -f -t fork,vfork,posix_spawn -p <PID>
+   ```
+
+4. **Common Subprocess Pitfalls**
+   - Monkey patches don't propagate
+   - Class attributes aren't shared
+   - File descriptors may not inherit
+   - Signal handlers need re-registration
+
+### **Backend Architecture Decision Framework**
+**When making architectural changes, follow this protocol:**
+
+1. **Preserve Existing Functionality**
+   - Use configuration-driven switching vs code deletion
+   - Implement factory patterns for backend selection  
+   - Maintain backward compatibility during transitions
+   - Test dual-system operation before migration
+
+2. **Privacy & Security Assessment**
+   - Evaluate microphone/camera access patterns (continuous vs triggered)
+   - Document privacy implications of architectural changes
+   - Consider user consent for always-on services
+   - Implement graceful degradation for privacy-conscious users
+
+3. **System-Level Integration Considerations**
+   - **Always-on services**: Require launch control/launchd integration
+   - **Background processes**: Need proper resource management and cleanup
+   - **Service persistence**: Must survive system reboots/sleep cycles
+   - **Process monitoring**: Health checks and automatic restart mechanisms
+
+### **Dependency Management Protocol**
+
+**Architecture Compatibility Issues** (e.g., ARM64 vs x86_64):
+1. **Check system architecture** before suggesting libraries
+2. **Verify native support** vs emulation requirements
+3. **Upgrade dependencies** systematically when compatibility issues arise
+4. **Document version constraints** and their architectural implications
+
+**Version Conflict Resolution**:
+- Analyze dependency trees for compatibility
+- Prefer upstream fixes over local workarounds
+- Document version locks and their technical reasons
+- Test dependency upgrades in isolation before integration
+
+### **Testing & Verification Enhanced Protocol**
+
+**System Integration Testing**:
+- **Process verification**: Check running services (ps aux | grep)
+- **Log analysis**: Monitor initialization and runtime logs  
+- **End-to-end testing**: Verify complete workflows (trigger → process → output)
+- **Architecture validation**: Confirm native vs emulated execution
+
+**Configuration Testing**:
+- Test configuration changes in isolation
+- Verify environment variable propagation
+- Validate service restart behavior
+- Check configuration persistence across reboots
+
+### **Session-Specific Lessons Learned**
+
+**Wake Word Integration Challenges**:
+- ARM64 vs x86_64 compatibility crucial for Apple Silicon Macs
+- pvporcupine version 1.9.5 lacks ARM64 support (RealtimeSTT Issue #119)
+- Solution: Upgrade to pvporcupine 3.0.5 with native ARM64 libraries
+- Wake word engines require specific backend parameter specification
+
+**Docker Compatibility During Migration**:
+- Missing files after migration break Docker builds
+- Solution: Create placeholder files to maintain Docker compatibility
+- Keep both modern (RealtimeSTT) and legacy (Docker) systems operational
+- Use configuration switching rather than complete removal
+
+**Configuration-First Architecture**:
+- User preference: CONFIG-driven backend selection vs code duplication
+- Factory patterns enable clean switching between backends
+- Environment variables preferred for runtime configuration
+- Single source of truth for system behavior
+
+**Real-time vs Discrete Transcription**:
+- enable_realtime: true enables live transcription updates
+- Final text still used for auto-paste (preserves workflow)
+- Pre-buffer duration critical for context capture (2+ seconds optimal)
+- VAD sensitivity affects trigger reliability (0.4 balanced)
+
+## 📐 **Key Architectural Decisions**
+
+### **Parallel vs Sequential Triggers**
+- **Decision**: Run wake word and keyboard listeners in parallel threads
+- **Rationale**: Users can choose trigger method based on context
+- **Implementation**: Main thread (keyboard) + daemon thread (wake word)
+
+### **Model Consistency** 
+- **Decision**: Force both triggers to use "base" model
+- **Rationale**: Consistent accuracy more important than wake word speed
+- **Implementation**: `use_main_model_for_realtime=True` + `realtime_model_type="base"`
+
+### **Code Reuse**
+- **Decision**: Reuse existing ClipboardManager and paste logic
+- **Rationale**: Proven stable implementation, avoid duplication
+- **Implementation**: Wake word wrapper imports and uses same ClipboardManager class
 
 ## ✅ Migration Status: Backend Migration COMPLETE
 

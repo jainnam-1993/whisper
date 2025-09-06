@@ -1,6 +1,23 @@
 # Whisper Dictation
 
-A multilingual dictation app based on OpenAI's Whisper ASR model for accurate offline speech-to-text conversion. The app runs in the background and is triggered through keyboard shortcuts, supporting multiple languages and Whisper models.
+A multilingual dictation app based on OpenAI's Whisper ASR model for accurate offline speech-to-text conversion. The app runs in the background and supports both keyboard shortcuts and **"Jarvis" wake word activation**, with multiple languages and Whisper models.
+
+## 🗣️ **New Feature: Jarvis Wake Word**
+
+This enhanced version includes **Jarvis wake word detection** powered by Picovoice Porcupine:
+
+- **Say "Jarvis"** → Start speaking → Automatic transcription and paste
+- **Double Right Command** → Backup keyboard trigger 
+- **RealtimeSTT backend** → 0.24s transcription (vs 3-5s Docker)
+- **Auto-paste functionality** → Seamless text insertion
+
+### Quick Start with Wake Words
+```bash
+# Start the enhanced service with Jarvis wake word:
+/Volumes/workplace/tools/whisper/.venv/bin/python3.13 host_key_listener.py
+
+# Then simply say "Jarvis" followed by your text!
+```
 
 ## 🚀 Quick Start
 

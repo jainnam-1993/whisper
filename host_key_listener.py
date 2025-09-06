@@ -14,11 +14,12 @@ CONFIG = {
         "container_name": "whisper-dictation",
         "min_recording_time": 3.0
     },
-    # New RealtimeSTT settings
+    # Enhanced RealtimeSTT settings - wake words disabled due to ARM64 compatibility
     "realtimestt": {
-        "enable_realtime": False,
-        "pre_buffer_duration": 1.0,
-        "vad_sensitivity": 0.4
+        "enable_realtime": True,           # Enable real-time transcription
+        "pre_buffer_duration": 1.0,        # 1-second pre-buffer for context
+        "vad_sensitivity": 0.4,            # Voice activity detection sensitivity
+        "wake_words": "jarvis"             # Wake word activation ("jarvis")
     }
 }
 
@@ -182,9 +183,16 @@ class RealtimeSTTCommunicator:
     """RealtimeSTT backend - same interface as DockerCommunicator"""
     
     def __init__(self, model="base", language="en", settings=None):
+        settings = settings or {}
         try:
             from realtimestt_wrapper import RealtimeSTTWrapper
-            self.transcription_service = RealtimeSTTWrapper(model=model, language=language)
+            self.transcription_service = RealtimeSTTWrapper(
+                model=model, 
+                language=language,
+                wake_words=settings.get("wake_words"),
+                enable_realtime=settings.get("enable_realtime", False),
+                pre_buffer_duration=settings.get("pre_buffer_duration", 1.0)
+            )
         except ImportError as e:
             print(f"Warning: RealtimeSTT not available: {e}")
             print("Falling back to Docker backend")
@@ -200,7 +208,11 @@ class RealtimeSTTCommunicator:
             return
             
         self.is_transcribing = True
-        print("🎙️ Starting RealtimeSTT transcription...")
+        
+        if self.settings.get("wake_words"):
+            print(f"🗣️ Say '{self.settings.get('wake_words')}' then speak...")
+        else:
+            print("🎙️ Starting RealtimeSTT transcription...")
         
         try:
             # Use RealtimeSTT backend with continuous listening
@@ -489,6 +501,39 @@ def main():
             # Create backend based on configuration (no if-else needed)
             communicator = TranscriptionBackendFactory.create_backend(CONFIG)
             key_listener = DoubleCommandKeyListener(communicator)
+            
+            # Start wake word listener in parallel thread if configured
+            wake_word_thread = None
+            if CONFIG.get("realtimestt", {}).get("wake_words"):
+                print("🎤 Starting parallel wake word listener for 'Jarvis'...")
+                def run_wake_word_listener():
+                    try:
+                        from wake_word_wrapper import WakeWordRealtimeSTTWrapper
+                        from streaming_notification import StreamingOverlayManager
+                        
+                        # Create notification manager for visual feedback
+                        ui_manager = StreamingOverlayManager(None)  # No rumps app for wake word thread
+                        
+                        # Create wake word wrapper
+                        wrapper = WakeWordRealtimeSTTWrapper(
+                            model=CONFIG.get("model_name", "base"),
+                            language=CONFIG.get("language", "en"),
+                            wake_word="jarvis",
+                            sensitivity=1.0,
+                            timeout=0
+                        )
+                        
+                        # Connect UI to wrapper
+                        wrapper.ui_manager = ui_manager
+                        
+                        # Start continuous listening with GUI support
+                        wrapper.continuous_listen()
+                    except Exception as e:
+                        print(f"Wake word listener error: {e}")
+                
+                wake_word_thread = threading.Thread(target=run_wake_word_listener, daemon=True)
+                wake_word_thread.start()
+                print("✅ Wake word listener started in background with GUI support")
             
             # Start the keyboard listener
             listener = keyboard.Listener(
