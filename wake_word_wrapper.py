@@ -140,7 +140,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 wake_words=self.wake_word,
                 wakeword_backend='pvporcupine',  # Primary backend
                 wake_words_sensitivity=self.sensitivity,
-                wake_word_timeout=10,  # 10 seconds to start speaking after "jarvis"
+                wake_word_timeout=3,   # 3 seconds to start speaking after "jarvis"
                 wake_word_activation_delay=0.0,  # Immediate wake word mode
                 wake_word_buffer_duration=0.8,   # Cut out wake word from recording
                 
@@ -155,7 +155,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 # CORRECTED: Valid RealtimeSTT VAD parameters only
                 silero_sensitivity=0.4,             # Balanced sensitivity  
                 webrtc_sensitivity=2,               # Less aggressive WebRTC
-                post_speech_silence_duration=2.0,   # 2 seconds silence to stop
+                post_speech_silence_duration=3.0,   # 3 seconds silence to stop
                 min_length_of_recording=0.3,        # Minimum 300ms recording
                 min_gap_between_recordings=0.5,     # 500ms gap between recordings
                 
@@ -183,16 +183,16 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                     language=self.language,
                     wakeword_backend='openwakeword',
                     wake_words_sensitivity=self.sensitivity,
-                    wake_word_timeout=10,  # 10 seconds to start speaking after "jarvis"
+                    wake_word_timeout=3,   # 3 seconds to start speaking after "jarvis"
                     spinner=False,
                     enable_realtime_transcription=False,
                     
-                    # Same balanced VAD settings for fallback
-                    silero_sensitivity=0.35,
-                    webrtc_sensitivity=1,
-                    post_speech_silence_duration=2.0,
-                    min_length_of_recording=0.5,
-                    min_gap_between_recordings=1.0,
+                    # Same updated VAD settings for fallback
+                    silero_sensitivity=0.4,
+                    webrtc_sensitivity=2,
+                    post_speech_silence_duration=3.0,
+                    min_length_of_recording=0.3,
+                    min_gap_between_recordings=0.5,
                     
                     on_wakeword_detected=self._on_wake_word_detected,
                     on_wakeword_timeout=self._on_wake_word_timeout,

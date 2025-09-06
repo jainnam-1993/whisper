@@ -18,19 +18,19 @@
 ### ⚙️ **WORKING VAD Configuration (CONFIRMED FUNCTIONAL)**
 - **Silero VAD Sensitivity**: `0.4` - Balanced speech detection
 - **WebRTC VAD Sensitivity**: `2` - Less aggressive detection  
-- **Post-speech Silence Duration**: `2.0 seconds` - Stops after 2s silence (allows natural pauses)
+- **Post-speech Silence Duration**: `3.0 seconds` - Stops after 3s silence (allows natural pauses)
 - **Min Recording Length**: `0.3 seconds` - 300ms minimum recording
 - **Min Gap Between Recordings**: `0.5 seconds` - 500ms between recordings
 - **Wake Word Sensitivity**: `1.0` - Maximum sensitivity for "Jarvis"
-- **Wake Word Timeout**: `10 seconds` - Time to START speaking after "jarvis" (only applies before speech begins)
+- **Wake Word Timeout**: `3 seconds` - Time to START speaking after "jarvis" (only applies before speech begins)
 - **Model**: `base` - Consistent for both triggers
 
 **✅ TESTED & VERIFIED**: This configuration successfully detects speech, stops on silence, and completes full transcription + auto-paste workflow.
 
 **📝 Important Timeout Behavior**:
-- **Before speaking**: 10-second timeout to start speaking after "jarvis"
-- **While speaking**: No timeout limit - only 2-second silence detection stops recording
-- **Recording limits**: Can record indefinitely until 2 seconds of continuous silence detected
+- **Before speaking**: 3-second timeout to start speaking after "jarvis"
+- **While speaking**: No timeout limit - only 3-second silence detection stops recording
+- **Recording limits**: Can record indefinitely until 3 seconds of continuous silence detected
 
 ### ✅ **What Was Accomplished This Session**
 1. **Diagnosed Wake Word Failure**: Subprocess wasn't inheriting Picovoice access key
