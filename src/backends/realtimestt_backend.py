@@ -121,10 +121,6 @@ class RealtimeSTTWrapper(TranscriptionService):
 
                 # Recording behavior - conditional silence detection
                 "post_speech_silence_duration": self.post_speech_silence_duration if self.post_speech_silence_duration is not None else 999.0,  # Use 999s for manual mode (effectively infinite)
-                
-                # Disable VAD stopping in manual mode - only stop on manual trigger
-                "use_microphone": True,
-                "no_microphone_input": False,
                 "min_length_of_recording": self.min_length_of_recording,       # From CONFIG
                 "min_gap_between_recordings": self.min_gap_between_recordings,      # From CONFIG
 
@@ -181,23 +177,34 @@ class RealtimeSTTWrapper(TranscriptionService):
             self.partial_text = ""
             self.last_complete_text = ""
 
-            # RealtimeSTT handles all the audio capture and processing
-            text = self.recorder.text()
-
-            if text and text.strip():
-                print(f"✅ Complete transcription: '{text}'")
-                return text
-            elif self.partial_text and self.partial_text.strip():
-                # If no complete text but we have partial text (e.g., from interruption)
-                print(f"⚡ Using partial transcription: '{self.partial_text}'")
-                return self.partial_text
-            elif self.last_complete_text and self.last_complete_text.strip():
-                # If we had stabilized text during the session
-                print(f"🔄 Using last stable transcription: '{self.last_complete_text}'")
-                return self.last_complete_text
+            # Check if we're in manual mode (no silence duration = keyboard mode)
+            if self.post_speech_silence_duration is None:
+                # Manual mode - we control start/stop, no VAD
+                print("🎯 Using manual recording mode (no VAD)")
+                self.recorder.start()
+                # In keyboard mode, this will be stopped by abort_and_transcribe()
+                # We block here until manually stopped
+                import time
+                while True:
+                    time.sleep(0.1)  # Keep alive until abort_and_transcribe() is called
             else:
-                print("ℹ️ No speech detected")
-                return ""
+                # Automatic mode - RealtimeSTT handles all the audio capture and processing with VAD
+                text = self.recorder.text()
+
+                if text and text.strip():
+                    print(f"✅ Complete transcription: '{text}'")
+                    return text
+                elif self.partial_text and self.partial_text.strip():
+                    # If no complete text but we have partial text (e.g., from interruption)
+                    print(f"⚡ Using partial transcription: '{self.partial_text}'")
+                    return self.partial_text
+                elif self.last_complete_text and self.last_complete_text.strip():
+                    # If we had stabilized text during the session
+                    print(f"🔄 Using last stable transcription: '{self.last_complete_text}'")
+                    return self.last_complete_text
+                else:
+                    print("ℹ️ No speech detected")
+                    return ""
 
         except KeyboardInterrupt:
             print("🛑 Recording interrupted by user")
@@ -217,30 +224,48 @@ class RealtimeSTTWrapper(TranscriptionService):
             if hasattr(self, 'recorder') and self.recorder:
                 print("🛑 Force stopping RealtimeSTT recorder...")
                 
-                # Try to abort the current recording session
-                try:
-                    # Check if recorder has an abort method
-                    if hasattr(self.recorder, 'abort'):
-                        self.recorder.abort()
-                        print("✅ RealtimeSTT recorder aborted successfully")
-                    elif hasattr(self.recorder, 'stop'):
-                        self.recorder.stop() 
+                # In manual mode, we need to stop and get transcription
+                if self.post_speech_silence_duration is None:
+                    # Manual mode - stop recording and get text
+                    try:
+                        self.recorder.stop()
+                        text = self.recorder.text()
                         print("✅ RealtimeSTT recorder stopped successfully")
-                    else:
-                        print("⚠️ No abort/stop method found on recorder")
-                except Exception as abort_error:
-                    print(f"⚠️ Could not abort recorder: {abort_error}")
-                
-                # Try to get partial transcription if available
-                if self.partial_text and self.partial_text.strip():
-                    print(f"⚡ Returning partial transcription: '{self.partial_text}'")
-                    return self.partial_text
-                elif self.last_complete_text and self.last_complete_text.strip():
-                    print(f"🔄 Returning last stable transcription: '{self.last_complete_text}'")
-                    return self.last_complete_text
+                        
+                        if text and text.strip():
+                            print(f"⚡ Manual transcription: '{text}'")
+                            return text
+                        else:
+                            print("⏹️ No transcription available yet - recording may have been too short")
+                            return ""
+                    except Exception as stop_error:
+                        print(f"⚠️ Could not stop recorder: {stop_error}")
+                        return ""
                 else:
-                    print("⏹️ No transcription available yet - recording may have been too short")
-                    return ""
+                    # Auto mode - try to abort ongoing session
+                    try:
+                        # Check if recorder has an abort method
+                        if hasattr(self.recorder, 'abort'):
+                            self.recorder.abort()
+                            print("✅ RealtimeSTT recorder aborted successfully")
+                        elif hasattr(self.recorder, 'stop'):
+                            self.recorder.stop() 
+                            print("✅ RealtimeSTT recorder stopped successfully")
+                        else:
+                            print("⚠️ No abort/stop method found on recorder")
+                    except Exception as abort_error:
+                        print(f"⚠️ Could not abort recorder: {abort_error}")
+                    
+                    # Try to get partial transcription if available
+                    if self.partial_text and self.partial_text.strip():
+                        print(f"⚡ Returning partial transcription: '{self.partial_text}'")
+                        return self.partial_text
+                    elif self.last_complete_text and self.last_complete_text.strip():
+                        print(f"🔄 Returning last stable transcription: '{self.last_complete_text}'")
+                        return self.last_complete_text
+                    else:
+                        print("⏹️ No transcription available yet - recording may have been too short")
+                        return ""
         except Exception as e:
             print(f"❌ Error in abort_and_transcribe: {e}")
             return ""
