@@ -39,14 +39,9 @@ CONFIG = {
 }
 
 import time
-import os
-import subprocess
-import threading
 import traceback
 import sys
-import fcntl
 from pynput import keyboard
-from ..utils.accessibility import _execute_applescript_safely
 from ..utils.clipboard import ClipboardManager
 from ..utils.process import SingleInstanceLock, create_daemon_thread
 from ..utils.recording_events import RecordingEvent
@@ -248,10 +243,6 @@ def main():
                 def run_wake_word_listener():
                     try:
                         from .wake_word_service import WakeWordRealtimeSTTWrapper
-                        from ..utils.notification import StreamingOverlayManager
-
-                        # Create notification manager for visual feedback
-                        ui_manager = StreamingOverlayManager(None)  # No rumps app for wake word thread
 
                         # Get wake word settings
                         wake_settings = CONFIG["wake_word_settings"]
@@ -270,9 +261,6 @@ def main():
                             min_gap_between_recordings=wake_settings["min_gap_between_recordings"],
                             event_manager=event_manager
                         )
-
-                        # Connect UI to wrapper
-                        wrapper.ui_manager = ui_manager
 
                         # Start continuous listening with GUI support
                         wrapper.continuous_listen()

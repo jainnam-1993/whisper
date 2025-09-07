@@ -9,7 +9,6 @@ from ..backends.transcription_base import TranscriptionService
 from ..utils.clipboard import ClipboardManager
 from ..utils.recording_events import RecordingEvent
 import time
-import subprocess
 import threading
 
 
