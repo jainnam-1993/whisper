@@ -735,3 +735,4 @@ Currently hardcoded, future version will support:
 - Animation speed
 - Auto-hide delay
 - Bar count and style
+- Do not make any configuration changes without explicit information from the user

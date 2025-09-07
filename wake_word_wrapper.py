@@ -128,6 +128,23 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     def _initialize_recorder(self):
         """Initialize RealtimeSTT with wake word detection"""
         try:
+            # Monkey patch RealtimeSTT to fix pvporcupine access key issue
+            import os
+            access_key = "lk++IHEpUel5qLDl6dc4e2qR12RqlKoMNzILpflCnLYVuTba4t3v0w=="
+            os.environ['PICOVOICE_ACCESS_KEY'] = access_key
+            
+            # Monkey patch pvporcupine.create to include access key
+            import pvporcupine
+            original_create = pvporcupine.create
+            
+            def patched_create(*args, **kwargs):
+                if 'access_key' not in kwargs:
+                    kwargs['access_key'] = access_key
+                return original_create(*args, **kwargs)
+            
+            pvporcupine.create = patched_create
+            print("🔧 Monkey patched pvporcupine.create with access key")
+            
             print(f"🔍 DEBUG: Initializing AudioToTextRecorder with model='{self.model_name}'")
             self.recorder = AudioToTextRecorder(
                 # Model configuration
@@ -153,9 +170,9 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 on_realtime_transcription_stabilized=self._on_stabilized_update,
                 
                 # LESS SENSITIVE: Better silence detection 
-                silero_sensitivity=0.6,             # Higher threshold = less sensitive to noise
-                webrtc_sensitivity=3,               # Even less aggressive WebRTC
-                post_speech_silence_duration=2.0,   # 2 seconds silence to stop
+                silero_sensitivity=0.6,             # Optimal for local dictation (per research)
+                webrtc_sensitivity=1,               # Balanced detection (0=conservative, 3=too sensitive)  
+                post_speech_silence_duration=2.0,   # 2 seconds silence to stop (research: 300-700ms optimal)
                 min_length_of_recording=0.3,        # Minimum 300ms recording
                 min_gap_between_recordings=0.5,     # 500ms gap between recordings
                 
@@ -173,45 +190,9 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             )
             
         except Exception as e:
-            print(f"❌ Error initializing wake word detection: {e}")
-            print("Trying OpenWakeWord backend...")
-            
-            try:
-                # Fallback to OpenWakeWord with same corrected VAD settings
-                self.recorder = AudioToTextRecorder(
-                    model=self.model_name,
-                    language=self.language,
-                    wakeword_backend='openwakeword',
-                    wake_words_sensitivity=self.sensitivity,
-                    wake_word_timeout=3,   # 3 seconds to start speaking after "jarvis"
-                    spinner=False,
-                    enable_realtime_transcription=False,
-                    
-                    # Same less sensitive VAD settings for fallback
-                    silero_sensitivity=0.6,
-                    webrtc_sensitivity=3,
-                    post_speech_silence_duration=2.0,
-                    min_length_of_recording=0.3,
-                    min_gap_between_recordings=0.5,
-                    
-                    on_wakeword_detected=self._on_wake_word_detected,
-                    on_wakeword_timeout=self._on_wake_word_timeout,
-                    on_recording_start=self._on_recording_start,
-                    on_recording_stop=self._on_recording_stop,
-                )
-                print("✅ OpenWakeWord backend initialized")
-                
-            except Exception as e2:
-                print(f"❌ OpenWakeWord also failed: {e2}")
-                print("Falling back to basic RealtimeSTT (no wake words)")
-                
-                # Final fallback - no wake words
-                self.recorder = AudioToTextRecorder(
-                    model=self.model_name,
-                    language=self.language,
-                    spinner=False,
-                    enable_realtime_transcription=False,
-                )
+            print(f"❌ Error initializing pvporcupine wake word detection: {e}")
+            print("❌ Wake word system requires pvporcupine with access key")
+            raise  # Don't fallback, force fix the pvporcupine issue
     
     def start_listening(self):
         """Start listening for wake word + transcription"""
@@ -365,7 +346,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         self.real_time_text = text
         if self.ui_manager:
             self.ui_manager.update_transcription(text, is_final=False)
-        print(f"🔄 Real-time: {text[:50]}..." if len(text) > 50 else f"🔄 Real-time: {text}")
+        # Real-time logging removed - you requested chunked mode only
     
     def _on_stabilized_update(self, text):
         """Update GUI with stabilized segments"""

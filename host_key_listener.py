@@ -192,7 +192,8 @@ class RealtimeSTTCommunicator:
                 language=language,
                 wake_words=None,  # Force no wake words for keyboard trigger
                 enable_realtime=settings.get("enable_realtime", False),
-                pre_buffer_duration=settings.get("pre_buffer_duration", 1.0)
+                pre_buffer_duration=settings.get("pre_buffer_duration", 1.0),
+                vad_sensitivity=settings.get("vad_sensitivity", 0.4)
             )
         except ImportError as e:
             print(f"Warning: RealtimeSTT not available: {e}")
@@ -202,52 +203,84 @@ class RealtimeSTTCommunicator:
         self.clipboard = ClipboardManager()  # Reuse existing clipboard manager
         self.is_transcribing = False
         self.settings = settings or {}
+        self.recording_thread = None
+        self.stop_requested = False
         
     def start_recording(self):
-        """Same interface as DockerCommunicator - drop-in replacement"""
+        """Same interface as DockerCommunicator - start recording non-blocking"""
         if self.is_transcribing:
             return
             
         self.is_transcribing = True
+        self.stop_requested = False
         
-        # Keyboard trigger always does direct recording
         print("🎙️ Starting direct RealtimeSTT recording...")
+        print("🔍 Press Right Command once to stop recording")
         
-        try:
-            # Use RealtimeSTT backend with continuous listening
-            transcription = self.transcription_service.transcribe()
-            
-            if transcription and transcription.strip():
-                print(f"Transcription: {transcription}")
+        # Store start time for compatibility with original pattern
+        self.start_time = time.time()
+        
+        # Start recording in background thread (like original subprocess)
+        def record_in_background():
+            try:
+                # This will block until speech is detected and completed
+                # The stop_recording() method can interrupt it with abort()
+                transcription = self.transcription_service.transcribe()
                 
-                # Keep exact same clipboard workflow as Docker version
-                self.clipboard.preserve_clipboard()
-                
-                if self.clipboard.copy_to_clipboard(transcription):
-                    print("Text copied to clipboard")
-                    time.sleep(0.5)
+                # Process transcription whether stopped early or completed naturally
+                if transcription and transcription.strip():
+                    print(f"Transcription completed: {transcription}")
                     
-                    if self.clipboard.paste_from_clipboard():
-                        print("Text pasted from clipboard")
+                    # Use exact same clipboard workflow as DockerCommunicator  
+                    self.clipboard.preserve_clipboard()
+                    
+                    if self.clipboard.copy_to_clipboard(transcription):
+                        print("Text copied to clipboard")
                         time.sleep(0.5)
-                        self.clipboard.restore_clipboard()
+                        
+                        if self.clipboard.paste_from_clipboard():
+                            print("Text pasted from clipboard")
+                            time.sleep(0.5)
+                            self.clipboard.restore_clipboard()
+                        else:
+                            print("Failed to paste - please paste manually (Cmd+V)")
                     else:
-                        print("Failed to paste - please paste manually (Cmd+V)")
-                else:
-                    print("Failed to copy text to clipboard")
-            else:
-                print("No transcription result received")
-                
-        except Exception as e:
-            print(f"RealtimeSTT transcription error: {e}")
-            
-        finally:
-            self.is_transcribing = False
+                        print("Failed to copy text to clipboard")
+                elif not transcription or not transcription.strip():
+                    print("No speech detected")
+                    
+            except Exception as e:
+                if not self.stop_requested:
+                    print(f"RealtimeSTT recording error: {e}")
+            finally:
+                self.is_transcribing = False
+        
+        # Start recording in background (like original subprocess.Popen)
+        self.recording_thread = threading.Thread(target=record_in_background, daemon=True)
+        self.recording_thread.start()
     
     def stop_recording(self):
-        """Same interface as DockerCommunicator"""
-        # RealtimeSTT handles stop internally
-        pass
+        """Same interface as DockerCommunicator - stop and transcribe immediately"""
+        if not self.is_transcribing:
+            return
+            
+        print("🛑 Stop requested - will transcribe when current speech ends...")
+        self.stop_requested = True
+        
+        # Don't abort - let RealtimeSTT finish current speech naturally
+        # The silence detection (3 seconds) will stop it and return transcription
+        # This preserves whatever speech was captured
+        
+        try:
+            # Wait for background thread to finish naturally
+            if self.recording_thread and self.recording_thread.is_alive():
+                print("⏳ Waiting for speech to complete...")
+                self.recording_thread.join(timeout=5.0)
+                
+        except Exception as e:
+            print(f"Error in stop_recording: {e}")
+        finally:
+            self.is_transcribing = False
 
 class TranscriptionBackendFactory:
     """Factory for creating transcription backends based on configuration"""
@@ -499,10 +532,11 @@ def main():
             sys.exit(1)
         
         try:
-            # Check Docker container
-            if not check_docker_container():
-                print("Aborting due to Docker container issues.")
-                return
+            # Only check Docker if using Docker backend
+            if CONFIG.get("transcription_backend") == "docker":
+                if not check_docker_container():
+                    print("Aborting due to Docker container issues.")
+                    return
                 
             print("Starting key listener for double Command press...")
             print("Double-press Right Command to start recording")

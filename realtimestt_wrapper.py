@@ -19,7 +19,7 @@ class RealtimeSTTWrapper(TranscriptionService):
     - Future-ready for real-time mode
     """
     
-    def __init__(self, model="base", language="en", wake_words=None, enable_realtime=False, pre_buffer_duration=1.0):
+    def __init__(self, model="base", language="en", wake_words=None, enable_realtime=False, pre_buffer_duration=1.0, vad_sensitivity=0.4):
         """
         Initialize RealtimeSTT wrapper
         
@@ -38,14 +38,18 @@ class RealtimeSTTWrapper(TranscriptionService):
         self.wake_words = wake_words
         self.enable_realtime = enable_realtime
         self.pre_buffer_duration = pre_buffer_duration
+        self.vad_sensitivity = vad_sensitivity
+        
+        # Store partial transcription for interruption handling
+        self.partial_text = ""
+        self.last_complete_text = ""
         
         # Initialize RealtimeSTT recorder
         self._initialize_recorder()
         
         wake_info = f" with wake word '{wake_words}'" if wake_words else ""
         realtime_info = " (real-time mode)" if enable_realtime else " (discrete mode)"
-        print(f"🎙️ RealtimeSTT initialized with {model} model{wake_info}{realtime_info}")
-    
+        print(f"🎙️ RealtimeSTT initialized with {model} model{wake_info}{realtime_info}")    
     def _initialize_recorder(self):
         """Initialize the RealtimeSTT recorder with optimal settings"""
         try:
@@ -75,7 +79,7 @@ class RealtimeSTTWrapper(TranscriptionService):
                 "realtime_model_type": self.model_name,  # Use same model for realtime
                 "use_main_model_for_realtime": True,     # Force using main model
                 
-                # Real-time mode configuration
+                # Real-time mode configuration - only enable if explicitly requested
                 "enable_realtime_transcription": self.enable_realtime,
                 
                 # Wake word configuration - pvporcupine with continuous listening
@@ -88,9 +92,9 @@ class RealtimeSTTWrapper(TranscriptionService):
                 # Disable RealtimeSTT's console UI (we handle UI)
                 "spinner": False,
                 
-                # VAD configuration - optimized for recording
-                "silero_sensitivity": 0.8,  # Voice activity detection sensitivity (increased)
-                "webrtc_sensitivity": 3,    # Alternative VAD method
+                # VAD configuration - use settings from config
+                "silero_sensitivity": self.vad_sensitivity,   # Voice activity detection sensitivity  
+                "webrtc_sensitivity": 2,     # Alternative VAD method
                 
                 # Recording behavior
                 "post_speech_silence_duration": 3.0,  # Stop after 3 seconds silence
@@ -100,11 +104,13 @@ class RealtimeSTTWrapper(TranscriptionService):
                 # Pre-recording buffer (captures audio before VAD triggers)
                 "pre_recording_buffer_duration": self.pre_buffer_duration,
                 
-                # Callbacks for integration (optional)
+                # Callbacks for integration (including real-time transcription)
                 "on_recording_start": self._on_recording_start,
                 "on_recording_stop": self._on_recording_stop,
                 "on_vad_detect_start": self._on_vad_start,
                 "on_vad_detect_stop": self._on_vad_stop,
+                "on_realtime_transcription_update": self._on_realtime_update,
+                "on_realtime_transcription_stabilized": self._on_realtime_stabilized,
             }
             
             # Remove None values (wake_words parameter only added if specified)
@@ -144,20 +150,34 @@ class RealtimeSTTWrapper(TranscriptionService):
         try:
             print("📻 Starting recording with RealtimeSTT...")
             
+            # Clear previous partial text
+            self.partial_text = ""
+            self.last_complete_text = ""
+            
             # RealtimeSTT handles all the audio capture and processing
             text = self.recorder.text()
             
             if text and text.strip():
-                print(f"✅ Transcribed: '{text}'")
-                # Use inherited type_text method for output
-                self.type_text(text)
+                print(f"✅ Complete transcription: '{text}'")
                 return text
+            elif self.partial_text and self.partial_text.strip():
+                # If no complete text but we have partial text (e.g., from interruption)
+                print(f"⚡ Using partial transcription: '{self.partial_text}'")
+                return self.partial_text
+            elif self.last_complete_text and self.last_complete_text.strip():
+                # If we had stabilized text during the session
+                print(f"🔄 Using last stable transcription: '{self.last_complete_text}'")
+                return self.last_complete_text
             else:
                 print("ℹ️ No speech detected")
                 return ""
                 
         except KeyboardInterrupt:
             print("🛑 Recording interrupted by user")
+            # Return partial text if available when interrupted
+            if self.partial_text and self.partial_text.strip():
+                print(f"⚡ Returning partial from interrupt: '{self.partial_text}'")
+                return self.partial_text
             return ""
         except Exception as e:
             print(f"❌ RealtimeSTT transcription error: {e}")
@@ -188,6 +208,20 @@ class RealtimeSTTWrapper(TranscriptionService):
     def _on_vad_stop(self):
         """Called when voice activity stops"""
         print("🔇 RealtimeSTT: Voice stopped")
+    
+    def _on_realtime_update(self, text):
+        """Called with partial transcription updates"""
+        self.partial_text = text
+        # Only show real-time updates if real-time mode is enabled
+        if self.enable_realtime:
+            print(f"🔄 Partial: {text}")
+    
+    def _on_realtime_stabilized(self, text):
+        """Called when transcription segment is stabilized"""
+        self.last_complete_text = text
+        # Only show stabilized updates if real-time mode is enabled
+        if self.enable_realtime:
+            print(f"✅ Stable: {text}")
     
     def enable_realtime_mode(self):
         """Enable real-time transcription mode (future enhancement)"""
