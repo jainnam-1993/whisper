@@ -19,11 +19,7 @@ class RealtimeSTTWrapper(TranscriptionService):
     - Future-ready for real-time mode
     """
 
-    def __init__(self, model, language, wake_words=None, enable_realtime=None, 
-                 pre_buffer_duration=None, vad_sensitivity=None, post_speech_silence_duration=None, 
-                 webrtc_sensitivity=None, min_length_of_recording=None,
-                 min_gap_between_recordings=None, wake_words_sensitivity=None, wake_word_timeout=None,
-                 wake_word_activation_delay=None):
+    def __init__(self, model, language, wake_words=None, config=None, **kwargs):
         """
         Initialize RealtimeSTT wrapper
 
@@ -31,25 +27,41 @@ class RealtimeSTTWrapper(TranscriptionService):
             model: Whisper model name (tiny, base, small, medium, large)
             language: Language code (en, es, fr, etc.)
             wake_words: Wake word(s) for voice activation (e.g., "jarvis")
-            enable_realtime: Enable real-time transcription streaming
-            pre_buffer_duration: Audio pre-buffer duration in seconds
+            config: Configuration dict with all settings
+            **kwargs: Backward compatibility for individual parameters
         """
         super().__init__()
 
-        # Store config - ALL settings come from CONFIG now
-        self.model_name = model
-        self.language = language
-        self.wake_words = wake_words
-        self.enable_realtime = enable_realtime
-        self.pre_buffer_duration = pre_buffer_duration
-        self.vad_sensitivity = vad_sensitivity
-        self.post_speech_silence_duration = post_speech_silence_duration
-        self.webrtc_sensitivity = webrtc_sensitivity
-        self.min_length_of_recording = min_length_of_recording
-        self.min_gap_between_recordings = min_gap_between_recordings
-        self.wake_words_sensitivity = wake_words_sensitivity
-        self.wake_word_timeout = wake_word_timeout
-        self.wake_word_activation_delay = wake_word_activation_delay
+        # Use config dict if provided, otherwise fall back to individual parameters
+        if config:
+            self.model_name = model
+            self.language = language
+            self.wake_words = wake_words
+            self.enable_realtime = config.get("enable_realtime")
+            self.pre_buffer_duration = config.get("pre_buffer_duration")
+            self.vad_sensitivity = config.get("vad_sensitivity")
+            self.post_speech_silence_duration = config.get("post_speech_silence_duration")  # May be None for manual mode
+            self.webrtc_sensitivity = config.get("webrtc_sensitivity")
+            self.min_length_of_recording = config.get("min_length_of_recording")
+            self.min_gap_between_recordings = config.get("min_gap_between_recordings")
+            self.wake_words_sensitivity = config.get("wake_words_sensitivity")
+            self.wake_word_timeout = config.get("wake_word_timeout")
+            self.wake_word_activation_delay = config.get("wake_word_activation_delay")
+        else:
+            # Backward compatibility - use individual parameters
+            self.model_name = model
+            self.language = language
+            self.wake_words = wake_words
+            self.enable_realtime = kwargs.get("enable_realtime")
+            self.pre_buffer_duration = kwargs.get("pre_buffer_duration")
+            self.vad_sensitivity = kwargs.get("vad_sensitivity")
+            self.post_speech_silence_duration = kwargs.get("post_speech_silence_duration")
+            self.webrtc_sensitivity = kwargs.get("webrtc_sensitivity")
+            self.min_length_of_recording = kwargs.get("min_length_of_recording")
+            self.min_gap_between_recordings = kwargs.get("min_gap_between_recordings")
+            self.wake_words_sensitivity = kwargs.get("wake_words_sensitivity")
+            self.wake_word_timeout = kwargs.get("wake_word_timeout")
+            self.wake_word_activation_delay = kwargs.get("wake_word_activation_delay")
 
         # Store partial transcription for interruption handling
         self.partial_text = ""
@@ -59,7 +71,7 @@ class RealtimeSTTWrapper(TranscriptionService):
         self._initialize_recorder()
 
         wake_info = f" with wake word '{wake_words}'" if wake_words else ""
-        realtime_info = " (real-time mode)" if enable_realtime else " (discrete mode)"
+        realtime_info = " (real-time mode)" if self.enable_realtime else " (discrete mode)"
         print(f"🎙️ RealtimeSTT initialized with {model} model{wake_info}{realtime_info}")
     def _initialize_recorder(self):
         """Initialize the RealtimeSTT recorder with optimal settings"""
@@ -107,8 +119,12 @@ class RealtimeSTTWrapper(TranscriptionService):
                 "silero_sensitivity": self.vad_sensitivity,   # Voice activity detection sensitivity
                 "webrtc_sensitivity": self.webrtc_sensitivity, # Alternative VAD method
 
-                # Recording behavior - ALL from CONFIG now
-                "post_speech_silence_duration": self.post_speech_silence_duration,  # Stop after configured silence duration
+                # Recording behavior - conditional silence detection
+                "post_speech_silence_duration": self.post_speech_silence_duration if self.post_speech_silence_duration is not None else 999.0,  # Use 999s for manual mode (effectively infinite)
+                
+                # Disable VAD stopping in manual mode - only stop on manual trigger
+                "use_microphone": True,
+                "no_microphone_input": False,
                 "min_length_of_recording": self.min_length_of_recording,       # From CONFIG
                 "min_gap_between_recordings": self.min_gap_between_recordings,      # From CONFIG
 
@@ -192,6 +208,41 @@ class RealtimeSTTWrapper(TranscriptionService):
             return ""
         except Exception as e:
             print(f"❌ RealtimeSTT transcription error: {e}")
+            return ""
+
+    def abort_and_transcribe(self):
+        """Immediately stop recording and return transcription of captured audio"""
+        try:
+            # Force stop the recorder and get whatever was captured
+            if hasattr(self, 'recorder') and self.recorder:
+                print("🛑 Force stopping RealtimeSTT recorder...")
+                
+                # Try to abort the current recording session
+                try:
+                    # Check if recorder has an abort method
+                    if hasattr(self.recorder, 'abort'):
+                        self.recorder.abort()
+                        print("✅ RealtimeSTT recorder aborted successfully")
+                    elif hasattr(self.recorder, 'stop'):
+                        self.recorder.stop() 
+                        print("✅ RealtimeSTT recorder stopped successfully")
+                    else:
+                        print("⚠️ No abort/stop method found on recorder")
+                except Exception as abort_error:
+                    print(f"⚠️ Could not abort recorder: {abort_error}")
+                
+                # Try to get partial transcription if available
+                if self.partial_text and self.partial_text.strip():
+                    print(f"⚡ Returning partial transcription: '{self.partial_text}'")
+                    return self.partial_text
+                elif self.last_complete_text and self.last_complete_text.strip():
+                    print(f"🔄 Returning last stable transcription: '{self.last_complete_text}'")
+                    return self.last_complete_text
+                else:
+                    print("⏹️ No transcription available yet - recording may have been too short")
+                    return ""
+        except Exception as e:
+            print(f"❌ Error in abort_and_transcribe: {e}")
             return ""
 
     def cleanup(self):

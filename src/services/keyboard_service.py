@@ -9,19 +9,32 @@ CONFIG = {
     "transcription_backend": "realtimestt",  # Options: "docker", "realtimestt"
     "model_name": "base",
     "language": "en",
-    # Enhanced RealtimeSTT settings - ALL parameters from wrapper
-    "realtimestt": {
-        "enable_realtime": False,                    # Enable real-time transcription
-        "pre_buffer_duration": 1.5,                 # 2-second pre-buffer for context
-        "vad_sensitivity": 0.3,                      # Silero VAD sensitivity (0.0-1.0) - very low for noisy environments
-        "post_speech_silence_duration": 1.0,        # Seconds of silence before stopping - extended for constant noise
-        "webrtc_sensitivity": 2,                    # WebRTC VAD sensitivity (0-3) - higher = less sensitive
-        "min_length_of_recording": 0.3,             # Minimum recording length (seconds)
-        "min_gap_between_recordings": 0.5,          # Gap between recordings (seconds) - prevents noise retriggering
-        "wake_words": "jarvis",                     # Wake word activation
-        "wake_words_sensitivity": 1.0,              # Wake word detection sensitivity
-        "wake_word_timeout": 3,                     # Timeout to start speaking after wake word
-        "wake_word_activation_delay": 0.0           # Delay after wake word detection
+    
+    # Wake word specific settings (automatic control)
+    "wake_word_settings": {
+        "enable_realtime": False,
+        "pre_buffer_duration": 1.5,
+        "vad_sensitivity": 0.3,
+        "post_speech_silence_duration": 3.0,        # Auto-stop after 3s silence
+        "webrtc_sensitivity": 2,
+        "min_length_of_recording": 0.3,
+        "min_gap_between_recordings": 0.5,
+        "wake_words": "jarvis",
+        "wake_words_sensitivity": 1.0,
+        "wake_word_timeout": 3,
+        "wake_word_activation_delay": 0.0
+    },
+    
+    # Double command key specific settings (manual control)
+    "keyboard_settings": {
+        "enable_realtime": False,
+        "pre_buffer_duration": 1.5,
+        "vad_sensitivity": 0.3,
+        # NO post_speech_silence_duration - manual control only
+        "webrtc_sensitivity": 2,
+        "min_length_of_recording": 0.3,
+        "min_gap_between_recordings": 0.5
+        # No wake word settings for keyboard trigger
     }
 }
 
@@ -193,9 +206,7 @@ class RealtimeSTTCommunicator:
                 model=model,
                 language=language,
                 wake_words=None,  # Force no wake words for keyboard trigger
-                enable_realtime=settings.get("enable_realtime", False),
-                pre_buffer_duration=settings.get("pre_buffer_duration", 1.0),
-                vad_sensitivity=settings.get("vad_sensitivity", 0.4)
+                config=settings  # Pass entire config dict
             )
         except ImportError as e:
             print(f"Warning: RealtimeSTT not available: {e}")
@@ -266,18 +277,39 @@ class RealtimeSTTCommunicator:
         if not self.is_transcribing:
             return
 
-        print("🛑 Stop requested - will transcribe when current speech ends...")
+        print("🛑 Stop requested - forcing immediate transcription...")
         self.stop_requested = True
 
-        # Don't abort - let RealtimeSTT finish current speech naturally
-        # The silence detection (3 seconds) will stop it and return transcription
-        # This preserves whatever speech was captured
-
         try:
-            # Wait for background thread to finish naturally
+            # Force immediate transcription of whatever was captured
+            transcription = self.transcription_service.abort_and_transcribe()
+            
+            # Process transcription immediately
+            if transcription and transcription.strip():
+                print(f"Transcription from manual stop: {transcription}")
+
+                # Use exact same clipboard workflow as DockerCommunicator
+                self.clipboard.preserve_clipboard()
+
+                if self.clipboard.copy_to_clipboard(transcription):
+                    print("Text copied to clipboard")
+                    time.sleep(0.5)
+
+                    if self.clipboard.paste_from_clipboard():
+                        print("Text pasted from clipboard")
+                        time.sleep(0.5)
+                        self.clipboard.restore_clipboard()
+                    else:
+                        print("Failed to paste - please paste manually (Cmd+V)")
+                else:
+                    print("Failed to copy text to clipboard")
+            else:
+                print("No speech detected yet")
+
+            # Wait for background thread to finish naturally (brief timeout)
             if self.recording_thread and self.recording_thread.is_alive():
-                print("⏳ Waiting for speech to complete...")
-                self.recording_thread.join(timeout=5.0)
+                print("⏳ Waiting for recording thread to finish...")
+                self.recording_thread.join(timeout=1.0)
 
         except Exception as e:
             print(f"Error in stop_recording: {e}")
@@ -292,9 +324,8 @@ class TranscriptionBackendFactory:
         backend_type = config.get("transcription_backend", "docker")
 
         if backend_type == "realtimestt":
-            # For keyboard trigger, remove wake words (direct recording)
-            keyboard_settings = config.get("realtimestt", {}).copy()
-            keyboard_settings.pop("wake_words", None)  # Remove wake words for keyboard
+            # For keyboard trigger, use keyboard_settings (no wake words, no silence detection)
+            keyboard_settings = config.get("keyboard_settings", {})
 
             return RealtimeSTTCommunicator(
                 model=config.get("model_name", "base"),
@@ -550,7 +581,7 @@ def main():
 
             # Start wake word listener in parallel thread if configured
             wake_word_thread = None
-            if CONFIG.get("realtimestt", {}).get("wake_words"):
+            if CONFIG.get("wake_word_settings", {}).get("wake_words"):
                 print("🎤 Starting parallel wake word listener for 'Jarvis'...")
                 def run_wake_word_listener():
                     try:
@@ -560,18 +591,21 @@ def main():
                         # Create notification manager for visual feedback
                         ui_manager = StreamingOverlayManager(None)  # No rumps app for wake word thread
 
+                        # Get wake word settings
+                        wake_settings = CONFIG["wake_word_settings"]
+
                         # Create wake word wrapper
                         wrapper = WakeWordRealtimeSTTWrapper(
                             model=CONFIG.get("model_name", "base"),
                             language=CONFIG.get("language", "en"),
                             wake_word="jarvis",
-                            sensitivity=CONFIG["realtimestt"]["wake_words_sensitivity"],
-                            timeout=CONFIG["realtimestt"]["wake_word_timeout"],
-                            post_speech_silence_duration=CONFIG["realtimestt"]["post_speech_silence_duration"],
-                            silero_sensitivity=CONFIG["realtimestt"]["vad_sensitivity"],
-                            webrtc_sensitivity=CONFIG["realtimestt"]["webrtc_sensitivity"],
-                            min_length_of_recording=CONFIG["realtimestt"]["min_length_of_recording"],
-                            min_gap_between_recordings=CONFIG["realtimestt"]["min_gap_between_recordings"]
+                            sensitivity=wake_settings["wake_words_sensitivity"],
+                            timeout=wake_settings["wake_word_timeout"],
+                            post_speech_silence_duration=wake_settings["post_speech_silence_duration"],
+                            silero_sensitivity=wake_settings["vad_sensitivity"],
+                            webrtc_sensitivity=wake_settings["webrtc_sensitivity"],
+                            min_length_of_recording=wake_settings["min_length_of_recording"],
+                            min_gap_between_recordings=wake_settings["min_gap_between_recordings"]
                         )
 
                         # Connect UI to wrapper
