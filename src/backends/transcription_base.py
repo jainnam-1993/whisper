@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from pynput import keyboard
 import time
 import pyperclip
-from accessibility_utils import check_accessibility_permissions, get_accessibility_instructions, prompt_for_permissions, _execute_applescript_safely
+from ..utils.accessibility import check_accessibility_permissions, get_accessibility_instructions, prompt_for_permissions, _execute_applescript_safely
 
 
 class TranscriptionService(ABC):

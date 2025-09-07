@@ -5,5 +5,6 @@
 # This MUST be set before Python starts for subprocess inheritance
 export PICOVOICE_ACCESS_KEY="lk++IHEpUel5qLDl6dc4e2qR12RqlKoMNzILpflCnLYVuTba4t3v0w=="
 
-# Launch RealtimeSTT with wake word support
-exec /Volumes/workplace/tools/whisper/.venv/bin/python3.13 host_key_listener.py "$@"
+# Change to project directory and launch RealtimeSTT with wake word support
+cd /Volumes/workplace/tools/whisper
+exec ./.venv/bin/python3.13 -m src.services.keyboard_service "$@"

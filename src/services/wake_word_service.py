@@ -5,7 +5,7 @@ Extends the basic RealtimeSTT wrapper to include voice activation capabilities
 """
 
 from RealtimeSTT import AudioToTextRecorder
-from transcription_service import TranscriptionService
+from ..backends.transcription_base import TranscriptionService
 import time
 import subprocess
 

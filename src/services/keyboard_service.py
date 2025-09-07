@@ -33,7 +33,7 @@ import traceback
 import sys
 import fcntl
 from pynput import keyboard
-from accessibility_utils import _execute_applescript_safely
+from ..utils.accessibility import _execute_applescript_safely
 
 class SingleInstanceLock:
     """Ensures only one instance of the application runs at a time"""
@@ -187,7 +187,7 @@ class RealtimeSTTCommunicator:
     def __init__(self, model="base", language="en", settings=None):
         settings = settings or {}
         try:
-            from realtimestt_wrapper import RealtimeSTTWrapper
+            from ..backends.realtimestt_backend import RealtimeSTTWrapper
             # For keyboard trigger: use direct recording (no wake words)
             self.transcription_service = RealtimeSTTWrapper(
                 model=model,
@@ -554,8 +554,8 @@ def main():
                 print("🎤 Starting parallel wake word listener for 'Jarvis'...")
                 def run_wake_word_listener():
                     try:
-                        from wake_word_wrapper import WakeWordRealtimeSTTWrapper
-                        from streaming_notification import StreamingOverlayManager
+                        from .wake_word_service import WakeWordRealtimeSTTWrapper
+                        from ..utils.notification import StreamingOverlayManager
 
                         # Create notification manager for visual feedback
                         ui_manager = StreamingOverlayManager(None)  # No rumps app for wake word thread

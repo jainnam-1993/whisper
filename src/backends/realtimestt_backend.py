@@ -5,7 +5,7 @@ Drop-in replacement for WhisperTranscriptionService using RealtimeSTT engine
 """
 
 from RealtimeSTT import AudioToTextRecorder
-from transcription_service import TranscriptionService
+from .transcription_base import TranscriptionService
 
 
 class RealtimeSTTWrapper(TranscriptionService):
