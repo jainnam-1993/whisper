@@ -17,7 +17,7 @@
 
 ### ⚙️ **WORKING VAD Configuration (CONFIRMED FUNCTIONAL)**
 - **Silero VAD Sensitivity**: `0.4` - Balanced speech detection
-- **WebRTC VAD Sensitivity**: `2` - Less aggressive detection  
+- **WebRTC VAD Sensitivity**: `2` - Less aggressive detection
 - **Post-speech Silence Duration**: `3.0 seconds` - Stops after 3s silence (allows natural pauses)
 - **Min Recording Length**: `0.3 seconds` - 300ms minimum recording
 - **Min Gap Between Recordings**: `0.5 seconds` - 500ms between recordings
@@ -34,7 +34,7 @@
 
 ### ✅ **What Was Accomplished This Session**
 1. **Diagnosed Wake Word Failure**: Subprocess wasn't inheriting Picovoice access key
-2. **Fixed Environment Variable**: Added to `run.sh` for subprocess inheritance  
+2. **Fixed Environment Variable**: Added to `run.sh` for subprocess inheritance
 3. **Implemented Parallel Architecture**: Both triggers run simultaneously
 4. **Fixed Model Consistency**: Forced "base" model for both triggers (was defaulting to "tiny")
 5. **Added Auto-paste**: Wake word now has same ClipboardManager as keyboard trigger
@@ -59,7 +59,7 @@ The system now runs BOTH trigger modes simultaneously:
 - **Use case**: Silent environments, precise control
 
 #### **Mode 2: Wake Word Trigger** ✅ FULLY WORKING
-- **Activation**: Say "Jarvis" 
+- **Activation**: Say "Jarvis"
 - **Thread**: Background daemon thread (continuous listening)
 - **Model**: Base (same as keyboard for consistency)
 - **Auto-paste**: ✅ Same ClipboardManager implementation
@@ -114,7 +114,7 @@ Double Right Cmd → RealtimeSTT → Real-time Transcription → Auto-paste
 
 ### What Was Accomplished ✅
 1. **Researched existing solutions** - Found RealtimeSTT as perfect backend replacement
-2. **Installed RealtimeSTT** - Successfully installed with all dependencies  
+2. **Installed RealtimeSTT** - Successfully installed with all dependencies
 3. **Created wrapper component** - `realtimestt_wrapper.py` provides drop-in replacement
 4. **Modified main app** - Added `--use_realtimestt` flag to whisper_dictation.py
 5. **✅ COMPLETED: Double-Command Migration** - host_key_listener.py now uses RealtimeSTT backend
@@ -204,7 +204,7 @@ CONFIG = {
     "realtimestt": {
         "enable_realtime": True,           # Real-time transcription
         "pre_buffer_duration": 2.0,        # 2s pre-buffer for context
-        "vad_sensitivity": 0.4,            # Voice detection sensitivity  
+        "vad_sensitivity": 0.2,            # Voice detection sensitivity
         "wake_words": "jarvis"             # Wake word activation
     }
 }
@@ -226,7 +226,7 @@ CONFIG = {
 - **Use case**: Hands-free operation, natural speech interaction
 - **Launch control**: Required (always-on service)
 
-#### 2. **Keyboard Trigger** (Existing - Backup)  
+#### 2. **Keyboard Trigger** (Existing - Backup)
 - **Activation**: Double Right Command key
 - **Mode**: On-demand recording
 - **Use case**: Silent environments, precise control
@@ -273,7 +273,7 @@ Keyboard:    Cmd+Cmd → [Discrete recording] → Auto-paste
    ```bash
    # Check if subprocess has environment variable
    ps auxe | grep python | grep PICOVOICE
-   
+
    # Monitor subprocess creation
    sudo dtruss -f -t fork,vfork,posix_spawn -p <PID>
    ```
@@ -289,7 +289,7 @@ Keyboard:    Cmd+Cmd → [Discrete recording] → Auto-paste
 
 1. **Preserve Existing Functionality**
    - Use configuration-driven switching vs code deletion
-   - Implement factory patterns for backend selection  
+   - Implement factory patterns for backend selection
    - Maintain backward compatibility during transitions
    - Test dual-system operation before migration
 
@@ -323,7 +323,7 @@ Keyboard:    Cmd+Cmd → [Discrete recording] → Auto-paste
 
 **System Integration Testing**:
 - **Process verification**: Check running services (ps aux | grep)
-- **Log analysis**: Monitor initialization and runtime logs  
+- **Log analysis**: Monitor initialization and runtime logs
 - **End-to-end testing**: Verify complete workflows (trigger → process → output)
 - **Architecture validation**: Confirm native vs emulated execution
 
@@ -366,7 +366,7 @@ Keyboard:    Cmd+Cmd → [Discrete recording] → Auto-paste
 - **Rationale**: Users can choose trigger method based on context
 - **Implementation**: Main thread (keyboard) + daemon thread (wake word)
 
-### **Model Consistency** 
+### **Model Consistency**
 - **Decision**: Force both triggers to use "base" model
 - **Rationale**: Consistent accuracy more important than wake word speed
 - **Implementation**: `use_main_model_for_realtime=True` + `realtime_model_type="base"`
@@ -382,7 +382,7 @@ Keyboard:    Cmd+Cmd → [Discrete recording] → Auto-paste
 - ✅ RealtimeSTT backend integrated into host_key_listener.py
 - ✅ Configuration-based switching (no code deletion)
 - ✅ ClipboardManager functionality preserved
-- ✅ Double-command trigger working with new backend  
+- ✅ Double-command trigger working with new backend
 - ✅ Same Whisper base model, better architecture (0.24s vs 3-5s)
 - ✅ Pre-buffered audio capture (no missed speech beginnings)
 
@@ -434,7 +434,7 @@ on_realtime_transcription_update=self.handle_partial_text
 - Better VAD, buffering, error handling
 - Ready for real-time mode activation
 
-### 2. **ui_components.py** (⚠️ READY FOR INTEGRATION)  
+### 2. **ui_components.py** (⚠️ READY FOR INTEGRATION)
 - Modern overlay window with audio visualization
 - Real-time transcription display
 - Animated recording indicator
@@ -463,7 +463,7 @@ python whisper_dictation.py --use_realtimestt --model_name base
 ```
 Cmd+Alt Trigger (✅ SAME)
      ↓
-WhisperMenuBarApp (✅ SAME)  
+WhisperMenuBarApp (✅ SAME)
      ↓
 RealtimeSTTWrapper (✅ NEW - Better reliability)
      ↓
@@ -510,13 +510,13 @@ Text Output (✅ SAME)
 │ Audio Quality   │ ✅ Pre-buffered     │ ❌ Misses beginning  │
 │ Reliability     │ ✅ Robust           │ ⚠️ Docker dependent │
 │ Auto-paste      │ ❌ Manual only      │ ✅ Full automation  │
-│ Clipboard Mgmt  │ ❌ Basic            │ ✅ Preserve/restore  │  
+│ Clipboard Mgmt  │ ❌ Basic            │ ✅ Preserve/restore  │
 │ Resource Usage  │ ✅ Efficient        │ ❌ Docker overhead   │
 │ Future-ready    │ ✅ Real-time capable│ ❌ Legacy approach   │
 └─────────────────┴──────────────────────┴──────────────────────┘
 ```
 
-### **Key Insight**: 
+### **Key Insight**:
 **Both systems work simultaneously** - users can trigger with either Cmd+Alt OR double-command, but they use completely different backends and feature sets.
 
 ## 🎯 **Next Session Goals - UPDATED**
@@ -527,7 +527,7 @@ Text Output (✅ SAME)
 3. **Maintain double-command trigger** preference
 4. **Create enhanced host_key_listener_v2.py** with best of both systems
 
-### Priority 2: Enhanced Integration  
+### Priority 2: Enhanced Integration
 1. **Connect ui_components.py** to both trigger systems
 2. **Add audio visualization** during recording
 3. **Show real-time transcription** in overlay window
@@ -548,7 +548,7 @@ cp host_key_listener.py host_key_listener_realtimestt.py
 ```
 
 **Key Changes Needed**:
-1. Replace `DockerCommunicator` with `RealtimeSTTWrapper` 
+1. Replace `DockerCommunicator` with `RealtimeSTTWrapper`
 2. Keep `ClipboardManager` class (preserve/restore functionality)
 3. Keep double-command trigger logic
 4. Replace Docker transcription with RealtimeSTT.text() call
@@ -557,7 +557,7 @@ cp host_key_listener.py host_key_listener_realtimestt.py
 ## 💡 **Key Insights from This Session**
 
 1. **RealtimeSTT uses identical Whisper models** - no quality difference
-2. **Backend replacement is cleaner** than building parallel systems  
+2. **Backend replacement is cleaner** than building parallel systems
 3. **Your existing trigger system is superior** - keep it unchanged
 4. **UI components are ready** - just need integration
 5. **Real-time mode is optional** - can enable later with one flag
@@ -570,7 +570,7 @@ RealtimeSTT has different parameter names than expected. Fixed in wrapper.
 ### Issue 2: Virtual Environment
 Must use: `/Volumes/workplace/tools/whisper/.venv/bin/python3`
 
-### Issue 3: Lock File Management  
+### Issue 3: Lock File Management
 Existing whisper_dictation processes create lock conflicts.
 
 ## ⚡ **Quick Start Command**
@@ -585,14 +585,14 @@ rm -f .whisper_dictation.lock /tmp/whisper_service.lock
 ## 🎯 **Session Summary**
 
 ### Architecture Achievement:
-- ✅ **Same UX**: Cmd+Alt trigger preserved  
+- ✅ **Same UX**: Cmd+Alt trigger preserved
 - ✅ **Same Models**: Whisper base model unchanged
 - ✅ **Better Backend**: RealtimeSTT's robust processing
 - ⚠️ **UI Pending**: Modern overlay components ready but not connected
 
 ### Next Session: Complete Integration
 1. Connect ui_components.py to WhisperMenuBarApp
-2. Add audio visualization during recording  
+2. Add audio visualization during recording
 3. Enable real-time transcription display
 4. Test full workflow end-to-end
 

@@ -6,20 +6,22 @@ Listens for double Right Command press to trigger transcription.
 
 # Configuration - Change backend here (no code deletion)
 CONFIG = {
-    "transcription_backend": "realtimestt",  # Options: "docker", "realtimestt" 
+    "transcription_backend": "realtimestt",  # Options: "docker", "realtimestt"
     "model_name": "base",
     "language": "en",
-    # Keep all existing Docker settings for reversion
-    "docker": {
-        "container_name": "whisper-dictation",
-        "min_recording_time": 3.0
-    },
-    # Enhanced RealtimeSTT settings - wake words disabled due to ARM64 compatibility
+    # Enhanced RealtimeSTT settings - ALL parameters from wrapper
     "realtimestt": {
-        "enable_realtime": True,           # Enable real-time transcription
-        "pre_buffer_duration": 1.0,        # 1-second pre-buffer for context
-        "vad_sensitivity": 0.4,            # Voice activity detection sensitivity
-        "wake_words": "jarvis"             # Wake word activation ("jarvis")
+        "enable_realtime": False,                    # Enable real-time transcription
+        "pre_buffer_duration": 1.5,                 # 2-second pre-buffer for context
+        "vad_sensitivity": 0.3,                      # Silero VAD sensitivity (0.0-1.0) - very low for noisy environments
+        "post_speech_silence_duration": 1.0,        # Seconds of silence before stopping - extended for constant noise
+        "webrtc_sensitivity": 2,                    # WebRTC VAD sensitivity (0-3) - higher = less sensitive
+        "min_length_of_recording": 0.3,             # Minimum recording length (seconds)
+        "min_gap_between_recordings": 0.5,          # Gap between recordings (seconds) - prevents noise retriggering
+        "wake_words": "jarvis",                     # Wake word activation
+        "wake_words_sensitivity": 1.0,              # Wake word detection sensitivity
+        "wake_word_timeout": 3,                     # Timeout to start speaking after wake word
+        "wake_word_activation_delay": 0.0           # Delay after wake word detection
     }
 }
 
@@ -35,14 +37,14 @@ from accessibility_utils import _execute_applescript_safely
 
 class SingleInstanceLock:
     """Ensures only one instance of the application runs at a time"""
-    
+
     def __init__(self, lock_file_path=None):
         self.lock_file_path = lock_file_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), 
+            os.path.dirname(os.path.abspath(__file__)),
             '.host_key_listener.lock'
         )
         self.lock_file = None
-        
+
     def acquire(self):
         """Try to acquire the lock. Return True if successful, False otherwise."""
         try:
@@ -57,7 +59,7 @@ class SingleInstanceLock:
             if self.lock_file:
                 self.lock_file.close()
             return False
-            
+
     def release(self):
         """Release the lock"""
         if self.lock_file:
@@ -70,10 +72,10 @@ class SingleInstanceLock:
 
 class ClipboardManager:
     """Handles copying text to clipboard with preservation support"""
-    
+
     def __init__(self):
         self.preserved_content = None
-    
+
     def preserve_clipboard(self):
         """Preserve current clipboard content"""
         try:
@@ -85,14 +87,14 @@ class ClipboardManager:
             print(f"Warning: Could not preserve clipboard: {e}")
             self.preserved_content = None
             return False
-    
+
     def restore_clipboard(self):
         """Restore previously preserved clipboard content"""
         if self.preserved_content is not None:
             try:
                 process = subprocess.Popen(
-                    ['pbcopy'], 
-                    stdin=subprocess.PIPE, 
+                    ['pbcopy'],
+                    stdin=subprocess.PIPE,
                     close_fds=True
                 )
                 process.communicate(input=self.preserved_content.encode('utf-8'))
@@ -104,14 +106,14 @@ class ClipboardManager:
         else:
             print("No preserved clipboard content to restore")
             return False
-    
+
     @staticmethod
     def copy_to_clipboard(text):
         try:
             # Use pbcopy on macOS
             process = subprocess.Popen(
-                ['pbcopy'], 
-                stdin=subprocess.PIPE, 
+                ['pbcopy'],
+                stdin=subprocess.PIPE,
                 close_fds=True
             )
             process.communicate(input=text.encode('utf-8'))
@@ -120,7 +122,7 @@ class ClipboardManager:
             print(f"Error copying to clipboard: {e}")
             traceback.print_exc()
             return False
-    
+
     @staticmethod
     def paste_from_clipboard_applescript():
         """Uses AppleScript to paste from clipboard - more reliable on macOS"""
@@ -140,11 +142,11 @@ class ClipboardManager:
                 return "error: " & errMsg
             end try
             '''
-            
+
             # Execute the AppleScript securely
             result = _execute_applescript_safely(applescript, timeout=5)
             print(f"AppleScript result: stdout={result.stdout.strip()}, stderr={result.stderr.strip()}")
-            
+
             if result.returncode == 0 and "error:" not in result.stdout:
                 print("AppleScript paste seems successful")
                 return True
@@ -158,14 +160,14 @@ class ClipboardManager:
             print(f"Error pasting with AppleScript: {e}")
             traceback.print_exc()
             return False
-    
+
     @staticmethod
     def paste_from_clipboard():
         """First tries AppleScript, then falls back to keyboard simulation"""
         # Try AppleScript first
         if ClipboardManager.paste_from_clipboard_applescript():
             return True
-            
+
         # Fallback to keyboard simulation
         try:
             # Use keyboard shortcut to paste
@@ -181,14 +183,14 @@ class ClipboardManager:
 
 class RealtimeSTTCommunicator:
     """RealtimeSTT backend - same interface as DockerCommunicator"""
-    
+
     def __init__(self, model="base", language="en", settings=None):
         settings = settings or {}
         try:
             from realtimestt_wrapper import RealtimeSTTWrapper
             # For keyboard trigger: use direct recording (no wake words)
             self.transcription_service = RealtimeSTTWrapper(
-                model=model, 
+                model=model,
                 language=language,
                 wake_words=None,  # Force no wake words for keyboard trigger
                 enable_realtime=settings.get("enable_realtime", False),
@@ -199,45 +201,45 @@ class RealtimeSTTCommunicator:
             print(f"Warning: RealtimeSTT not available: {e}")
             print("Falling back to Docker backend")
             raise
-            
+
         self.clipboard = ClipboardManager()  # Reuse existing clipboard manager
         self.is_transcribing = False
         self.settings = settings or {}
         self.recording_thread = None
         self.stop_requested = False
-        
+
     def start_recording(self):
         """Same interface as DockerCommunicator - start recording non-blocking"""
         if self.is_transcribing:
             return
-            
+
         self.is_transcribing = True
         self.stop_requested = False
-        
+
         print("🎙️ Starting direct RealtimeSTT recording...")
         print("🔍 Press Right Command once to stop recording")
-        
+
         # Store start time for compatibility with original pattern
         self.start_time = time.time()
-        
+
         # Start recording in background thread (like original subprocess)
         def record_in_background():
             try:
                 # This will block until speech is detected and completed
                 # The stop_recording() method can interrupt it with abort()
                 transcription = self.transcription_service.transcribe()
-                
+
                 # Process transcription whether stopped early or completed naturally
                 if transcription and transcription.strip():
                     print(f"Transcription completed: {transcription}")
-                    
-                    # Use exact same clipboard workflow as DockerCommunicator  
+
+                    # Use exact same clipboard workflow as DockerCommunicator
                     self.clipboard.preserve_clipboard()
-                    
+
                     if self.clipboard.copy_to_clipboard(transcription):
                         print("Text copied to clipboard")
                         time.sleep(0.5)
-                        
+
                         if self.clipboard.paste_from_clipboard():
                             print("Text pasted from clipboard")
                             time.sleep(0.5)
@@ -248,35 +250,35 @@ class RealtimeSTTCommunicator:
                         print("Failed to copy text to clipboard")
                 elif not transcription or not transcription.strip():
                     print("No speech detected")
-                    
+
             except Exception as e:
                 if not self.stop_requested:
                     print(f"RealtimeSTT recording error: {e}")
             finally:
                 self.is_transcribing = False
-        
+
         # Start recording in background (like original subprocess.Popen)
         self.recording_thread = threading.Thread(target=record_in_background, daemon=True)
         self.recording_thread.start()
-    
+
     def stop_recording(self):
         """Same interface as DockerCommunicator - stop and transcribe immediately"""
         if not self.is_transcribing:
             return
-            
+
         print("🛑 Stop requested - will transcribe when current speech ends...")
         self.stop_requested = True
-        
+
         # Don't abort - let RealtimeSTT finish current speech naturally
         # The silence detection (3 seconds) will stop it and return transcription
         # This preserves whatever speech was captured
-        
+
         try:
             # Wait for background thread to finish naturally
             if self.recording_thread and self.recording_thread.is_alive():
                 print("⏳ Waiting for speech to complete...")
                 self.recording_thread.join(timeout=5.0)
-                
+
         except Exception as e:
             print(f"Error in stop_recording: {e}")
         finally:
@@ -284,16 +286,16 @@ class RealtimeSTTCommunicator:
 
 class TranscriptionBackendFactory:
     """Factory for creating transcription backends based on configuration"""
-    
+
     @staticmethod
     def create_backend(config):
         backend_type = config.get("transcription_backend", "docker")
-        
+
         if backend_type == "realtimestt":
             # For keyboard trigger, remove wake words (direct recording)
             keyboard_settings = config.get("realtimestt", {}).copy()
             keyboard_settings.pop("wake_words", None)  # Remove wake words for keyboard
-            
+
             return RealtimeSTTCommunicator(
                 model=config.get("model_name", "base"),
                 language=config.get("language", "en"),
@@ -319,28 +321,28 @@ class DockerCommunicator:
         """Start recording audio from the host system"""
         if self.is_transcribing:
             return
-            
+
         self.is_transcribing = True
         self.start_time = time.time()
         print("Started recording...")
-        
+
         # Start recording using system audio tools
         # Using sox to record audio with noise reduction
         try:
             self.recording_process = subprocess.Popen(
                 ["rec", "-r", "16000", "-c", "1", self.audio_file],
-                stdout=subprocess.PIPE, 
+                stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
         except Exception as e:
             print(f"Error starting recording: {e}")
             self.is_transcribing = False
-        
+
     def stop_recording(self):
         """Stop recording and send to Docker container for transcription"""
         if not self.is_transcribing:
             return
-            
+
         try:
             # Ensure we record for at least the minimum time
             current_time = time.time()
@@ -349,67 +351,67 @@ class DockerCommunicator:
                 wait_time = self.min_recording_time - elapsed
                 print(f"Recording for {wait_time:.1f} more seconds to reach minimum...")
                 time.sleep(wait_time)
-                
+
             print("Stopping recording and transcribing...")
-            
+
             # Terminate recording process
             if hasattr(self, 'recording_process'):
                 self.recording_process.terminate()
                 self.recording_process.wait()
-            
+
             # Check if the audio file exists and has content
             if os.path.exists(self.audio_file) and os.path.getsize(self.audio_file) > 1000:  # Require at least 1KB
                 print(f"Audio file size: {os.path.getsize(self.audio_file)} bytes")
-                
+
                 # Copy the audio file to the container
                 copy_result = subprocess.run([
-                    "docker", "cp", 
-                    self.audio_file, 
+                    "docker", "cp",
+                    self.audio_file,
                     f"{self.container_name}:/app/audio_to_transcribe.wav"
                 ], capture_output=True, text=True)
-                
+
                 if copy_result.returncode != 0:
                     print(f"Error copying file to container: {copy_result.stderr}")
                     self.is_transcribing = False
                     return
-                
+
                 # Execute transcription in the container using the transcribe.py script
                 result = subprocess.run([
-                    "docker", "exec", 
-                    self.container_name, 
+                    "docker", "exec",
+                    self.container_name,
                     "python", "/app/transcribe.py", "/app/audio_to_transcribe.wav"
                 ], capture_output=True, text=True)
-                
+
                 print(f"Transcription process output: {result.stdout}")
                 if result.stderr:
                     print(f"Transcription errors: {result.stderr}")
-                
+
                 # Get the transcription result
                 result = subprocess.run([
-                    "docker", "exec", 
-                    self.container_name, 
+                    "docker", "exec",
+                    self.container_name,
                     "cat", "/app/last_transcription.txt"
                 ], capture_output=True, text=True)
-                
+
                 # Copy and paste the result
                 if result.stdout and result.stdout.strip():
                     transcription = result.stdout.strip()
                     print(f"Transcription: {transcription}")
-                    
+
                     # Preserve original clipboard content
                     self.clipboard.preserve_clipboard()
-                    
+
                     # Copy to clipboard
                     if self.clipboard.copy_to_clipboard(transcription):
                         print("Text copied to clipboard")
                         # Small delay before pasting
                         time.sleep(0.5)
-                        
+
                         # Try a direct system paste using AppleScript
                         print("Attempting direct system paste...")
                         # Add a longer wait to ensure focus is back to editor
                         time.sleep(1)
-                        
+
                         # Paste the text using AppleScript
                         if self.clipboard.paste_from_clipboard():
                             print("Text pasted from clipboard")
@@ -420,7 +422,7 @@ class DockerCommunicator:
                             print("Failed to paste text - text is in clipboard, please paste manually (Cmd+V)")
                             print("Original clipboard will be restored after you paste manually")
                             # Note: In manual paste case, we don't restore immediately to allow user to paste
-                            
+
                             # As a fallback, display what's in the clipboard
                             try:
                                 clip_content = subprocess.run(["pbpaste"], capture_output=True, text=True)
@@ -431,7 +433,7 @@ class DockerCommunicator:
                         print("Failed to copy text to clipboard")
                 else:
                     print("No transcription result received or empty result")
-                
+
                 # Clean up the audio file
                 os.remove(self.audio_file)
             else:
@@ -447,7 +449,7 @@ class DoubleCommandKeyListener:
         self.communicator = docker_communicator
         self.key = keyboard.Key.cmd_r
         self.last_press_time = 0
-        
+
     def on_key_press(self, key):
         try:
             # Debug: Log all right command key presses
@@ -456,22 +458,22 @@ class DoubleCommandKeyListener:
             if key == self.key:
                 current_time = time.time()
                 time_diff = current_time - self.last_press_time
-                
+
                 print(f"🔍 DEBUG: Time since last press: {time_diff:.3f}s, is_transcribing: {self.communicator.is_transcribing}")
-                
+
                 # If not recording and double-pressed (within 0.5 seconds)
-                if not self.communicator.is_transcribing and time_diff < 0.5 and time_diff > 0:
+                if not self.communicator.is_transcribing and time_diff < 2.0 and time_diff > 0:
                     print("✅ Double command detected - starting recording!")
                     self.communicator.start_recording()
                 # If recording and single pressed - stop recording
                 elif self.communicator.is_transcribing:
                     self.communicator.stop_recording()
-                    
+
                 self.last_press_time = current_time
         except Exception as e:
             print(f"Error in key press handler: {e}")
             traceback.print_exc()
-            
+
     def on_key_release(self, key):
         pass
 
@@ -480,22 +482,22 @@ def check_docker_container():
     try:
         # Check if Docker is running
         docker_status = subprocess.run(
-            ["docker", "info"], 
-            capture_output=True, 
+            ["docker", "info"],
+            capture_output=True,
             text=True
         )
-        
+
         if docker_status.returncode != 0:
             print("Docker is not running. Please start Docker Desktop.")
             return False
-            
+
         # Check if container exists
         container_check = subprocess.run(
-            ["docker", "ps", "-q", "-f", "name=whisper-dictation"], 
-            capture_output=True, 
+            ["docker", "ps", "-q", "-f", "name=whisper-dictation"],
+            capture_output=True,
             text=True
         )
-        
+
         if not container_check.stdout:
             print("Whisper Docker container is not running. Starting it...")
             subprocess.run(["./docker-startup.sh"])
@@ -504,8 +506,8 @@ def check_docker_container():
                 print(f"Waiting for container to start ({i+1}/20)...")
                 time.sleep(1)
                 container_check = subprocess.run(
-                    ["docker", "ps", "-q", "-f", "name=whisper-dictation"], 
-                    capture_output=True, 
+                    ["docker", "ps", "-q", "-f", "name=whisper-dictation"],
+                    capture_output=True,
                     text=True
                 )
                 if container_check.stdout:
@@ -513,10 +515,10 @@ def check_docker_container():
                     # Give it a bit more time to load model
                     time.sleep(5)
                     return True
-            
+
             print("Container failed to start within timeout.")
             return False
-            
+
         return True
     except Exception as e:
         print(f"Error checking Docker: {e}")
@@ -530,22 +532,22 @@ def main():
         if not lock.acquire():
             print("Another instance is already running. Exiting.")
             sys.exit(1)
-        
+
         try:
             # Only check Docker if using Docker backend
             if CONFIG.get("transcription_backend") == "docker":
                 if not check_docker_container():
                     print("Aborting due to Docker container issues.")
                     return
-                
+
             print("Starting key listener for double Command press...")
             print("Double-press Right Command to start recording")
             print("Single-press Right Command while recording to stop and transcribe")
-            
+
             # Create backend based on configuration (no if-else needed)
             communicator = TranscriptionBackendFactory.create_backend(CONFIG)
             key_listener = DoubleCommandKeyListener(communicator)
-            
+
             # Start wake word listener in parallel thread if configured
             wake_word_thread = None
             if CONFIG.get("realtimestt", {}).get("wake_words"):
@@ -554,31 +556,36 @@ def main():
                     try:
                         from wake_word_wrapper import WakeWordRealtimeSTTWrapper
                         from streaming_notification import StreamingOverlayManager
-                        
+
                         # Create notification manager for visual feedback
                         ui_manager = StreamingOverlayManager(None)  # No rumps app for wake word thread
-                        
+
                         # Create wake word wrapper
                         wrapper = WakeWordRealtimeSTTWrapper(
                             model=CONFIG.get("model_name", "base"),
                             language=CONFIG.get("language", "en"),
                             wake_word="jarvis",
-                            sensitivity=1.0,
-                            timeout=0
+                            sensitivity=CONFIG["realtimestt"]["wake_words_sensitivity"],
+                            timeout=CONFIG["realtimestt"]["wake_word_timeout"],
+                            post_speech_silence_duration=CONFIG["realtimestt"]["post_speech_silence_duration"],
+                            silero_sensitivity=CONFIG["realtimestt"]["vad_sensitivity"],
+                            webrtc_sensitivity=CONFIG["realtimestt"]["webrtc_sensitivity"],
+                            min_length_of_recording=CONFIG["realtimestt"]["min_length_of_recording"],
+                            min_gap_between_recordings=CONFIG["realtimestt"]["min_gap_between_recordings"]
                         )
-                        
+
                         # Connect UI to wrapper
                         wrapper.ui_manager = ui_manager
-                        
+
                         # Start continuous listening with GUI support
                         wrapper.continuous_listen()
                     except Exception as e:
                         print(f"Wake word listener error: {e}")
-                
+
                 wake_word_thread = threading.Thread(target=run_wake_word_listener, daemon=True)
                 wake_word_thread.start()
                 print("✅ Wake word listener started in background with GUI support")
-            
+
             # Start the keyboard listener
             listener = keyboard.Listener(
                 on_press=key_listener.on_key_press,
@@ -594,4 +601,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main() 
+    main()

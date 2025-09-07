@@ -11,18 +11,22 @@ from transcription_service import TranscriptionService
 class RealtimeSTTWrapper(TranscriptionService):
     """
     Drop-in replacement for WhisperTranscriptionService using RealtimeSTT backend.
-    
+
     Benefits:
     - Better VAD (Voice Activity Detection)
-    - Robust audio buffering and error handling  
+    - Robust audio buffering and error handling
     - Same Whisper models, better architecture
     - Future-ready for real-time mode
     """
-    
-    def __init__(self, model="base", language="en", wake_words=None, enable_realtime=False, pre_buffer_duration=1.0, vad_sensitivity=0.4):
+
+    def __init__(self, model, language, wake_words=None, enable_realtime=None, 
+                 pre_buffer_duration=None, vad_sensitivity=None, post_speech_silence_duration=None, 
+                 webrtc_sensitivity=None, min_length_of_recording=None,
+                 min_gap_between_recordings=None, wake_words_sensitivity=None, wake_word_timeout=None,
+                 wake_word_activation_delay=None):
         """
         Initialize RealtimeSTT wrapper
-        
+
         Args:
             model: Whisper model name (tiny, base, small, medium, large)
             language: Language code (en, es, fr, etc.)
@@ -31,25 +35,32 @@ class RealtimeSTTWrapper(TranscriptionService):
             pre_buffer_duration: Audio pre-buffer duration in seconds
         """
         super().__init__()
-        
-        # Store config
+
+        # Store config - ALL settings come from CONFIG now
         self.model_name = model
         self.language = language
         self.wake_words = wake_words
         self.enable_realtime = enable_realtime
         self.pre_buffer_duration = pre_buffer_duration
         self.vad_sensitivity = vad_sensitivity
-        
+        self.post_speech_silence_duration = post_speech_silence_duration
+        self.webrtc_sensitivity = webrtc_sensitivity
+        self.min_length_of_recording = min_length_of_recording
+        self.min_gap_between_recordings = min_gap_between_recordings
+        self.wake_words_sensitivity = wake_words_sensitivity
+        self.wake_word_timeout = wake_word_timeout
+        self.wake_word_activation_delay = wake_word_activation_delay
+
         # Store partial transcription for interruption handling
         self.partial_text = ""
         self.last_complete_text = ""
-        
+
         # Initialize RealtimeSTT recorder
         self._initialize_recorder()
-        
+
         wake_info = f" with wake word '{wake_words}'" if wake_words else ""
         realtime_info = " (real-time mode)" if enable_realtime else " (discrete mode)"
-        print(f"🎙️ RealtimeSTT initialized with {model} model{wake_info}{realtime_info}")    
+        print(f"🎙️ RealtimeSTT initialized with {model} model{wake_info}{realtime_info}")
     def _initialize_recorder(self):
         """Initialize the RealtimeSTT recorder with optimal settings"""
         try:
@@ -57,20 +68,20 @@ class RealtimeSTTWrapper(TranscriptionService):
             import os
             if self.wake_words:
                 os.environ['PICOVOICE_ACCESS_KEY'] = 'lk++IHEpUel5qLDl6dc4e2qR12RqlKoMNzILpflCnLYVuTba4t3v0w=='
-                
+
                 # Monkey patch pvporcupine.create to include access key
                 import pvporcupine
                 original_create = pvporcupine.create
-                
+
                 def patched_create(*args, **kwargs):
                     # Always add access_key as first argument if not present
                     if len(args) == 0 or 'access_key' not in kwargs:
                         return original_create('lk++IHEpUel5qLDl6dc4e2qR12RqlKoMNzILpflCnLYVuTba4t3v0w==', *args, **kwargs)
                     else:
                         return original_create(*args, **kwargs)
-                
+
                 pvporcupine.create = patched_create
-            
+
             # Base configuration
             config = {
                 # Model configuration - same as your current setup
@@ -78,32 +89,32 @@ class RealtimeSTTWrapper(TranscriptionService):
                 "language": self.language,
                 "realtime_model_type": self.model_name,  # Use same model for realtime
                 "use_main_model_for_realtime": True,     # Force using main model
-                
+
                 # Real-time mode configuration - only enable if explicitly requested
                 "enable_realtime_transcription": self.enable_realtime,
-                
+
                 # Wake word configuration - pvporcupine with continuous listening
                 "wake_words": "jarvis" if self.wake_words else None,
-                "wakeword_backend": "pvporcupine" if self.wake_words else None, 
-                "wake_words_sensitivity": 1.0,  # Maximum sensitivity
-                "wake_word_timeout": 0,  # No timeout - continuous listening
-                "wake_word_activation_delay": 0.0,  # No delay
-                
+                "wakeword_backend": "pvporcupine" if self.wake_words else None,
+                "wake_words_sensitivity": self.wake_words_sensitivity,  # From CONFIG
+                "wake_word_timeout": self.wake_word_timeout,  # From CONFIG  
+                "wake_word_activation_delay": self.wake_word_activation_delay,  # From CONFIG
+
                 # Disable RealtimeSTT's console UI (we handle UI)
                 "spinner": False,
-                
+
                 # VAD configuration - use settings from config
-                "silero_sensitivity": self.vad_sensitivity,   # Voice activity detection sensitivity  
-                "webrtc_sensitivity": 2,     # Alternative VAD method
-                
-                # Recording behavior
-                "post_speech_silence_duration": 3.0,  # Stop after 3 seconds silence
-                "min_length_of_recording": 0.3,       # Minimum 300ms recording
-                "min_gap_between_recordings": 0,      # No gap between recordings
-                
+                "silero_sensitivity": self.vad_sensitivity,   # Voice activity detection sensitivity
+                "webrtc_sensitivity": self.webrtc_sensitivity, # Alternative VAD method
+
+                # Recording behavior - ALL from CONFIG now
+                "post_speech_silence_duration": self.post_speech_silence_duration,  # Stop after configured silence duration
+                "min_length_of_recording": self.min_length_of_recording,       # From CONFIG
+                "min_gap_between_recordings": self.min_gap_between_recordings,      # From CONFIG
+
                 # Pre-recording buffer (captures audio before VAD triggers)
                 "pre_recording_buffer_duration": self.pre_buffer_duration,
-                
+
                 # Callbacks for integration (including real-time transcription)
                 "on_recording_start": self._on_recording_start,
                 "on_recording_stop": self._on_recording_stop,
@@ -112,10 +123,10 @@ class RealtimeSTTWrapper(TranscriptionService):
                 "on_realtime_transcription_update": self._on_realtime_update,
                 "on_realtime_transcription_stabilized": self._on_realtime_stabilized,
             }
-            
+
             # Remove None values (wake_words parameter only added if specified)
             config = {k: v for k, v in config.items() if v is not None}
-            
+
             # Debug: Check if environment variable is set
             import os
             if self.wake_words:
@@ -124,39 +135,39 @@ class RealtimeSTTWrapper(TranscriptionService):
                 if env_key:
                     print(f"🔍 DEBUG: Key starts with: {env_key[:10]}...")
                 print(f"🔍 DEBUG: Wake word config: backend={config.get('wakeword_backend')}, words={config.get('wake_words')}")
-            
+
             self.recorder = AudioToTextRecorder(**config)
-            
+
             if self.wake_words:
                 print("🔍 DEBUG: AudioToTextRecorder created successfully with wake word config")
-            
+
         except Exception as e:
             print(f"Error initializing RealtimeSTT: {e}")
             import traceback
             traceback.print_exc()
             raise
-    
+
     def transcribe(self, audio_data=None, language=None):
         """
         Transcribe audio using RealtimeSTT backend
-        
+
         Args:
             audio_data: Ignored (RealtimeSTT handles audio capture)
             language: Optional language override
-            
+
         Returns:
             str: Transcribed text
         """
         try:
             print("📻 Starting recording with RealtimeSTT...")
-            
+
             # Clear previous partial text
             self.partial_text = ""
             self.last_complete_text = ""
-            
+
             # RealtimeSTT handles all the audio capture and processing
             text = self.recorder.text()
-            
+
             if text and text.strip():
                 print(f"✅ Complete transcription: '{text}'")
                 return text
@@ -171,7 +182,7 @@ class RealtimeSTTWrapper(TranscriptionService):
             else:
                 print("ℹ️ No speech detected")
                 return ""
-                
+
         except KeyboardInterrupt:
             print("🛑 Recording interrupted by user")
             # Return partial text if available when interrupted
@@ -182,7 +193,7 @@ class RealtimeSTTWrapper(TranscriptionService):
         except Exception as e:
             print(f"❌ RealtimeSTT transcription error: {e}")
             return ""
-    
+
     def cleanup(self):
         """Clean up RealtimeSTT resources"""
         try:
@@ -191,42 +202,42 @@ class RealtimeSTTWrapper(TranscriptionService):
                 print("🧹 RealtimeSTT cleanup complete")
         except Exception as e:
             print(f"Warning: RealtimeSTT cleanup error: {e}")
-    
+
     # Optional callback methods for debugging/integration
     def _on_recording_start(self):
         """Called when recording starts"""
         print("🔴 RealtimeSTT: Recording started")
-    
+
     def _on_recording_stop(self):
-        """Called when recording stops"""  
+        """Called when recording stops"""
         print("⏹️ RealtimeSTT: Recording stopped")
-    
+
     def _on_vad_start(self):
         """Called when voice activity detected"""
         print("🎤 RealtimeSTT: Voice detected")
-    
+
     def _on_vad_stop(self):
         """Called when voice activity stops"""
         print("🔇 RealtimeSTT: Voice stopped")
-    
+
     def _on_realtime_update(self, text):
         """Called with partial transcription updates"""
         self.partial_text = text
         # Only show real-time updates if real-time mode is enabled
         if self.enable_realtime:
             print(f"🔄 Partial: {text}")
-    
+
     def _on_realtime_stabilized(self, text):
         """Called when transcription segment is stabilized"""
         self.last_complete_text = text
         # Only show stabilized updates if real-time mode is enabled
         if self.enable_realtime:
             print(f"✅ Stable: {text}")
-    
+
     def enable_realtime_mode(self):
         """Enable real-time transcription mode (future enhancement)"""
         print("🚀 Enabling real-time mode...")
-        
+
         # Reinitialize with real-time enabled
         self.recorder = AudioToTextRecorder(
             model=self.model_name,
@@ -236,9 +247,9 @@ class RealtimeSTTWrapper(TranscriptionService):
             spinner=False,
             on_realtime_transcription_update=self._on_realtime_update
         )
-        
+
         print("✅ Real-time mode enabled")
-    
+
     def _on_realtime_update(self, text):
         """Handle real-time transcription updates (future enhancement)"""
         print(f"📝 Real-time: {text}")
@@ -248,12 +259,12 @@ class RealtimeSTTWrapper(TranscriptionService):
 def create_transcription_service(model_name, language=None, use_realtimestt=False):
     """
     Factory function to create transcription service
-    
+
     Args:
         model_name: Whisper model (tiny, base, small, medium, large)
         language: Language code
         use_realtimestt: Use RealtimeSTT backend (recommended)
-        
+
     Returns:
         TranscriptionService instance
     """
@@ -263,7 +274,7 @@ def create_transcription_service(model_name, language=None, use_realtimestt=Fals
         # Fallback to existing WhisperTranscriptionService
         from transcription_service import WhisperTranscriptionService
         import whisper
-        
+
         model = whisper.load_model(model_name)
         return WhisperTranscriptionService(model)
 
@@ -271,9 +282,9 @@ def create_transcription_service(model_name, language=None, use_realtimestt=Fals
 if __name__ == "__main__":
     # Test the wrapper
     print("Testing RealtimeSTT Wrapper...")
-    
+
     wrapper = RealtimeSTTWrapper(model="tiny", language="en")
-    
+
     print("Say something (press Ctrl+C to stop):")
     try:
         text = wrapper.transcribe()

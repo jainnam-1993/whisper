@@ -79,7 +79,9 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     """
     
     def __init__(self, model="base", language="en", wake_word="computer", 
-                 sensitivity=0.6, timeout=0):
+                 sensitivity=0.6, timeout=0, post_speech_silence_duration=1.5,
+                 silero_sensitivity=0.4, webrtc_sensitivity=2, 
+                 min_length_of_recording=0.3, min_gap_between_recordings=0.5):
         """
         Initialize wake word enabled RealtimeSTT wrapper
         
@@ -97,6 +99,11 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         self.wake_word = wake_word
         self.sensitivity = sensitivity
         self.timeout = timeout
+        self.post_speech_silence_duration = post_speech_silence_duration
+        self.silero_sensitivity = silero_sensitivity
+        self.webrtc_sensitivity = webrtc_sensitivity
+        self.min_length_of_recording = min_length_of_recording
+        self.min_gap_between_recordings = min_gap_between_recordings
         self.clipboard = ClipboardManager()
         
         # GUI support
@@ -169,12 +176,12 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 on_realtime_transcription_update=self._on_realtime_update,
                 on_realtime_transcription_stabilized=self._on_stabilized_update,
                 
-                # LESS SENSITIVE: Better silence detection 
-                silero_sensitivity=0.6,             # Optimal for local dictation (per research)
-                webrtc_sensitivity=1,               # Balanced detection (0=conservative, 3=too sensitive)  
-                post_speech_silence_duration=2.0,   # 2 seconds silence to stop (research: 300-700ms optimal)
-                min_length_of_recording=0.3,        # Minimum 300ms recording
-                min_gap_between_recordings=0.5,     # 500ms gap between recordings
+                # VAD settings from CONFIG (no more hardcoding)
+                silero_sensitivity=self.silero_sensitivity,
+                webrtc_sensitivity=self.webrtc_sensitivity,  
+                post_speech_silence_duration=self.post_speech_silence_duration,
+                min_length_of_recording=self.min_length_of_recording,
+                min_gap_between_recordings=self.min_gap_between_recordings,
                 
                 # Pre-recording buffer
                 pre_recording_buffer_duration=2.0,
