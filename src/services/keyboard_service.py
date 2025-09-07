@@ -15,7 +15,7 @@ CONFIG = {
         "enable_realtime": False,
         "pre_buffer_duration": 1.5,
         "vad_sensitivity": 0.3,
-        "post_speech_silence_duration": 3.0,        # Auto-stop after 3s silence
+        "post_speech_silence_duration": 1.5,        # Auto-stop after 1.5s silence
         "webrtc_sensitivity": 2,
         "min_length_of_recording": 0.3,
         "min_gap_between_recordings": 0.5,
@@ -49,6 +49,7 @@ from pynput import keyboard
 from ..utils.accessibility import _execute_applescript_safely
 from ..utils.clipboard import ClipboardManager
 from ..utils.process import SingleInstanceLock, create_daemon_thread
+from ..utils.recording_events import RecordingEvent
 
 # SingleInstanceLock moved to src/utils/process.py
 
@@ -171,8 +172,9 @@ def create_backend(config):
 # DockerCommunicator removed - using RealtimeSTT only
 
 class DoubleCommandKeyListener:
-    def __init__(self, docker_communicator):
+    def __init__(self, docker_communicator, event_manager=None):
         self.communicator = docker_communicator
+        self.event_manager = event_manager
         self.key = keyboard.Key.cmd_r
         self.last_press_time = 0
 
@@ -181,19 +183,32 @@ class DoubleCommandKeyListener:
             # Debug: Log all right command key presses
             if key == self.key:
                 print(f"🔍 DEBUG: Right Command key pressed at {time.time()}")
+                
             if key == self.key:
                 current_time = time.time()
                 time_diff = current_time - self.last_press_time
 
                 print(f"🔍 DEBUG: Time since last press: {time_diff:.3f}s, is_transcribing: {self.communicator.is_transcribing}")
 
-                # If not recording and double-pressed (within 0.5 seconds)
-                if not self.communicator.is_transcribing and time_diff < 2.0 and time_diff > 0:
-                    print("✅ Double command detected - starting recording!")
-                    self.communicator.start_recording()
-                # If recording and single pressed - stop recording
-                elif self.communicator.is_transcribing:
+                # MANUAL MODE LOGIC: Handle manual recording (takes priority)
+                if self.communicator.is_transcribing:
+                    # Manual recording is active - single press stops it
+                    print("🛑 Manual recording active - stopping recording")
+                    if self.event_manager:
+                        self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STOPPED)
                     self.communicator.stop_recording()
+                    
+                elif not self.communicator.is_transcribing and time_diff < 2.0 and time_diff > 0:
+                    # Double-click detected - start manual recording
+                    print("✅ Double command detected - starting manual recording!")
+                    if self.event_manager:
+                        self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STARTED)
+                    self.communicator.start_recording()
+                    
+                # WAKE WORD MODE LOGIC: Only handle if wake word is actively recording
+                elif self.event_manager and self.event_manager.is_wake_word_recording():
+                    print("🎤 Wake word recording active - single press will stop recording")
+                    self.event_manager.emit(RecordingEvent.MANUAL_STOP_REQUESTED)
 
                 self.last_press_time = current_time
         except Exception as e:
@@ -218,9 +233,13 @@ def main():
             print("Double-press Right Command to start recording")
             print("Single-press Right Command while recording to stop and transcribe")
 
+            # Create shared event manager for cross-service communication
+            from ..utils.recording_events import RecordingEventManager
+            event_manager = RecordingEventManager()
+
             # Create RealtimeSTT backend
             communicator = create_backend(CONFIG)
-            key_listener = DoubleCommandKeyListener(communicator)
+            key_listener = DoubleCommandKeyListener(communicator, event_manager)
 
             # Start wake word listener in parallel thread if configured
             wake_word_thread = None
@@ -237,7 +256,7 @@ def main():
                         # Get wake word settings
                         wake_settings = CONFIG["wake_word_settings"]
 
-                        # Create wake word wrapper
+                        # Create wake word wrapper with event manager
                         wrapper = WakeWordRealtimeSTTWrapper(
                             model=CONFIG.get("model_name", "base"),
                             language=CONFIG.get("language", "en"),
@@ -248,7 +267,8 @@ def main():
                             silero_sensitivity=wake_settings["vad_sensitivity"],
                             webrtc_sensitivity=wake_settings["webrtc_sensitivity"],
                             min_length_of_recording=wake_settings["min_length_of_recording"],
-                            min_gap_between_recordings=wake_settings["min_gap_between_recordings"]
+                            min_gap_between_recordings=wake_settings["min_gap_between_recordings"],
+                            event_manager=event_manager
                         )
 
                         # Connect UI to wrapper
@@ -265,6 +285,7 @@ def main():
                 )
                 wake_word_thread.start()
                 print("✅ Wake word listener started in background with GUI support")
+                print("🎯 NEW: Say 'jarvis' then hit Right Command to stop recording!")
 
             # Start the keyboard listener
             listener = keyboard.Listener(

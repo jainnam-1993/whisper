@@ -1,72 +1,91 @@
 #!/usr/bin/env python3
 """
-Streaming Notification Overlay - macOS-style dictation display
+Streaming Status Bar GUI - Native macOS status bar integration
 
-A lightweight, tkinter-free solution for real-time transcription display
-using system notifications and a simple overlay approach.
+Native macOS status bar integration for whisper transcription system.
+Replaces OSA script notifications with proper status bar icons and text.
 """
 
-import subprocess
 import threading
 import time
 import os
 from typing import Optional, Callable
 
+# Import the native status bar manager
+try:
+    from .native_status_bar import NativeStatusBarManager
+    STATUS_BAR_AVAILABLE = True
+except ImportError:
+    STATUS_BAR_AVAILABLE = False
+    print("⚠️ Native status bar not available, using fallback")
 
-class MacOSNotificationManager:
+
+class StatusBarGUIManager:
     """
-    Manager for macOS native notifications that can be updated.
-    Uses osascript to create sleek, system-native notifications.
+    Manager for native macOS status bar integration.
+    Provides rich visual feedback through status bar icons and text.
     """
     
     def __init__(self):
-        self.current_notification = None
+        self.native_manager = None
         self.is_active = False
-        self.update_thread = None
-        self._stop_updates = threading.Event()
+        self._init_status_bar()
+        
+    def _init_status_bar(self):
+        """Initialize the native status bar manager."""
+        if STATUS_BAR_AVAILABLE:
+            try:
+                self.native_manager = NativeStatusBarManager()
+                print("✅ Status bar GUI initialized")
+            except Exception as e:
+                print(f"⚠️ Status bar init failed: {e}")
+                self.native_manager = None
         
     def show_transcription_start(self):
-        """Show initial notification indicating transcription has started."""
-        try:
-            # Create initial notification
-            script = '''
-            display notification "🎤 Listening..." with title "Whisper Dictation" subtitle "Say something..."
-            '''
-            subprocess.run(['osascript', '-e', script], check=True, capture_output=True)
-            self.is_active = True
+        """Show initial status bar indication that transcription has started."""
+        if self.native_manager:
+            success = self.native_manager.start_recording()
+            self.is_active = success
+            return success
+        return False
+    
+    def show_processing(self, stage: str = "Processing"):
+        """Show processing stage in status bar."""
+        if self.native_manager:
+            self.native_manager.show_processing(stage)
             return True
-        except subprocess.CalledProcessError:
-            return False
+        return False
+    
+    def update_progress(self, value: int, stage: Optional[str] = None):
+        """Update progress with optional stage name."""
+        if self.native_manager:
+            self.native_manager.update_progress(value, stage)
+            return True
+        return False
     
     def show_final_transcription(self, text: str):
-        """Show final transcription result."""
-        try:
-            # Truncate text if too long for notification
-            display_text = text[:100] + "..." if len(text) > 100 else text
-            
-            script = f'''
-            display notification "{display_text}" with title "✅ Transcription Complete" subtitle "Text copied to clipboard"
-            '''
-            subprocess.run(['osascript', '-e', script], check=True, capture_output=True)
+        """Show final transcription result in status bar."""
+        if self.native_manager:
+            self.native_manager.update_transcription(text, is_final=True)
             self.is_active = False
             return True
-        except subprocess.CalledProcessError:
-            return False
+        return False
     
     def cleanup(self):
-        """Cleanup any active notifications."""
+        """Cleanup status bar resources."""
         self.is_active = False
-        self._stop_updates.set()
+        if self.native_manager:
+            self.native_manager.cleanup()
 
 
 class SimpleStreamingOverlay:
     """
-    A simple streaming overlay using terminal output and system notifications.
-    Falls back gracefully when GUI libraries aren't available.
+    A simple streaming overlay using native macOS status bar and terminal output.
+    Provides professional visual feedback without intrusive notifications.
     """
     
     def __init__(self):
-        self.notification_manager = MacOSNotificationManager()
+        self.status_manager = StatusBarGUIManager()
         self.is_recording = False
         self.current_text = ""
         self.last_update_time = 0
@@ -77,8 +96,8 @@ class SimpleStreamingOverlay:
             self.is_recording = True
             self.current_text = ""
             
-            # Show system notification
-            success = self.notification_manager.show_transcription_start()
+            # Show status bar indication
+            success = self.status_manager.show_transcription_start()
             
             # Also print to terminal for debugging
             print("🎤 " + "="*50)
@@ -86,6 +105,14 @@ class SimpleStreamingOverlay:
             print("🎤 " + "="*50)
             
             return success
+    
+    def show_processing(self, stage: str = "Processing"):
+        """Show processing stage."""
+        return self.status_manager.show_processing(stage)
+    
+    def update_progress(self, value: int, stage: Optional[str] = None):
+        """Update progress."""
+        return self.status_manager.update_progress(value, stage)
     
     def update_transcription(self, text: str, is_final: bool = False):
         """Update transcription text."""
@@ -101,34 +128,34 @@ class SimpleStreamingOverlay:
             status = "FINAL" if is_final else "partial"
             
             # Clear previous line and show new text
-            print(f"\r{prefix} [{status}] {text[:80]}" + " " * 20, end="", flush=True)
+            print(f"{prefix} [{status}] {text[:80]}" + " " * 20, end="", flush=True)
             self.last_update_time = current_time
         
-        # If this is final, show system notification
+        # If this is final, show status bar notification
         if is_final:
             self.stop_recording()
             if text.strip():
-                self.notification_manager.show_final_transcription(text)
+                self.status_manager.show_final_transcription(text)
             print()  # New line after final text
     
     def stop_recording(self):
         """Stop recording indication."""
         if self.is_recording:
             self.is_recording = False
-            print("\n🎤 Transcription complete.")
+            print("🎤 Transcription complete.")
             print("=" * 50)
     
     def cleanup(self):
         """Cleanup resources."""
-        self.notification_manager.cleanup()
+        self.status_manager.cleanup()
         if self.is_recording:
             self.stop_recording()
 
 
 class StreamingOverlayManager:
     """
-    Drop-in replacement for the complex UIManager that works without tkinter.
-    Provides the same interface but uses system notifications instead.
+    Drop-in replacement using native macOS status bar integration.
+    Provides the same interface but uses status bar GUI instead of OSA notifications.
     """
     
     def __init__(self, rumps_app=None):
@@ -137,7 +164,7 @@ class StreamingOverlayManager:
         self.is_recording = False
         
     def start_recording(self):
-        """Start recording and show notification."""
+        """Start recording and show status bar indication."""
         if not self.is_recording:
             self.is_recording = True
             self.overlay.start_recording()
@@ -145,6 +172,14 @@ class StreamingOverlayManager:
             # Update menu bar icon if available
             if self.rumps_app and hasattr(self.rumps_app, 'icon'):
                 self.rumps_app.icon = "🎤"
+    
+    def show_processing(self, stage: str = "Processing"):
+        """Show processing stage in status bar (NEW method from HANDOFF.md)."""
+        return self.overlay.show_processing(stage)
+    
+    def update_progress(self, value: int, stage: Optional[str] = None):
+        """Update progress with optional stage name (NEW method from HANDOFF.md)."""
+        return self.overlay.update_progress(value, stage)
     
     def update_transcription(self, text: str, is_final: bool = False):
         """Update transcription text."""
@@ -157,7 +192,7 @@ class StreamingOverlayManager:
                 self.rumps_app.icon = None  # Default icon
     
     def stop_recording(self):
-        """Stop recording and hide notification."""
+        """Stop recording and hide status bar indication."""
         if self.is_recording:
             self.is_recording = False
             self.overlay.stop_recording()
@@ -167,7 +202,7 @@ class StreamingOverlayManager:
                 self.rumps_app.icon = None  # Default icon
     
     def update_audio_levels(self, audio_data):
-        """Placeholder for audio level updates (not needed for notifications)."""
+        """Placeholder for audio level updates (not needed for status bar)."""
         pass
     
     def cleanup(self):
@@ -180,15 +215,29 @@ UIManager = StreamingOverlayManager
 
 
 if __name__ == "__main__":
-    def test_notification_system():
-        """Test the notification-based overlay system."""
+    def test_status_bar_system():
+        """Test the status bar-based overlay system."""
         manager = StreamingOverlayManager()
         
         try:
-            print("Testing streaming notification system...")
+            print("Testing native status bar system...")
+            print("👀 Look for status bar icons in your macOS menu bar!")
             
             # Start recording
             manager.start_recording()
+            time.sleep(1)
+            
+            # Show processing stages
+            manager.show_processing("Transcribing")
+            time.sleep(1)
+            
+            manager.update_progress(25, "Segmenting")
+            time.sleep(1)
+            
+            manager.update_progress(50, "Processing")
+            time.sleep(1)
+            
+            manager.update_progress(75, "Punctuation")
             time.sleep(1)
             
             # Simulate streaming updates
@@ -197,7 +246,7 @@ if __name__ == "__main__":
                 "Hello world",
                 "Hello world this is",
                 "Hello world this is a test",
-                "Hello world this is a test of the notification system."
+                "Hello world this is a test of the status bar system."
             ]
             
             for i, phrase in enumerate(test_phrases):
@@ -205,11 +254,11 @@ if __name__ == "__main__":
                 manager.update_transcription(phrase, is_final=is_final)
                 time.sleep(0.5)
             
-            print("\nTest completed!")
+            print("Test completed!")
             
         except KeyboardInterrupt:
-            print("\nTest interrupted")
+            print("Test interrupted")
         finally:
             manager.cleanup()
     
-    test_notification_system()
+    test_status_bar_system()

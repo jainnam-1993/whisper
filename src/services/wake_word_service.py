@@ -7,8 +7,10 @@ Extends the basic RealtimeSTT wrapper to include voice activation capabilities
 from RealtimeSTT import AudioToTextRecorder
 from ..backends.transcription_base import TranscriptionService
 from ..utils.clipboard import ClipboardManager
+from ..utils.recording_events import RecordingEvent
 import time
 import subprocess
+import threading
 
 
 # ClipboardManager moved to src/utils/clipboard.py
@@ -28,7 +30,8 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     def __init__(self, model="base", language="en", wake_word="computer", 
                  sensitivity=0.6, timeout=0, post_speech_silence_duration=1.5,
                  silero_sensitivity=0.4, webrtc_sensitivity=2, 
-                 min_length_of_recording=0.3, min_gap_between_recordings=0.5):
+                 min_length_of_recording=0.3, min_gap_between_recordings=0.5,
+                 event_manager=None):
         """
         Initialize wake word enabled RealtimeSTT wrapper
         
@@ -55,6 +58,15 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         
         # GUI support
         self.ui_manager = None
+        
+        # Event system for manual stop capability
+        self.event_manager = event_manager
+        self.manual_stop_requested = False
+        self.stop_event = threading.Event()
+        
+        # Subscribe to manual stop events if event manager provided
+        if self.event_manager:
+            self.event_manager.subscribe(RecordingEvent.MANUAL_STOP_REQUESTED, self._on_manual_stop_requested)
         
         # Supported wake words for pvporcupine
         self.supported_wake_words = [
@@ -191,34 +203,34 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         try:
             print(f"👂 Say '{self.wake_word}' to activate...")
             
-            # GUI is already shown by _on_wake_word_detected callback
-            # Real-time updates happen via _on_realtime_update callback
+            # Reset manual stop state
+            self.manual_stop_requested = False
+            self.stop_event.clear()
             
-            # Get FINAL chunk transcription (accurate)
-            print("🔄 Waiting for transcription to complete...")
-            final_text = self.recorder.text()
-            print(f"📝 Transcription received: '{final_text[:50]}...' (length: {len(final_text) if final_text else 0})")
+            # Notify that wake word recording started
+            if self.event_manager:
+                self.event_manager.emit(RecordingEvent.WAKE_WORD_RECORDING_STARTED)
             
-            if final_text and final_text.strip():
-                # Update GUI with final text and hide it
-                if self.ui_manager:
-                    self.ui_manager.update_transcription(final_text.strip(), is_final=True)
-                    self.ui_manager.stop_recording()
-                
-                print(f"✅ Final transcription: '{final_text.strip()}'")
-                
-                # Use unified clipboard workflow
-                if self.clipboard.copy_and_paste_text(final_text.strip()):
-                    print("✅ Text successfully copied and pasted")
-                else:
-                    print("❌ Failed to copy/paste - please paste manually (Cmd+V)")
-                return final_text
+            # Check if manual stop was requested while we were starting
+            if self.stop_event.wait(timeout=0.1):
+                print("⚡ Manual stop detected immediately - aborting...")
+                final_text = self.abort_recording()
             else:
-                # Hide GUI if no speech detected
-                if self.ui_manager:
-                    self.ui_manager.stop_recording()
-                print("ℹ️ No speech detected")
-                return ""
+                # Normal flow - let recorder.text() handle VAD naturally
+                print("🔄 Starting normal transcription (with VAD silence detection)...")
+                try:
+                    final_text = self.recorder.text()
+                    print(f"🔄 Normal transcription completed: '{final_text[:50] if final_text else 'None'}...'")
+                except Exception as e:
+                    print(f"❌ Normal transcription error: {e}")
+                    final_text = ""
+            
+            print(f"📝 Final transcription for processing: '{final_text[:50] if final_text else 'None'}...' (length: {len(final_text) if final_text else 0})")
+            
+            # Use unified processing for both completion paths
+            result = self._process_final_text(final_text)
+            print(f"🔄 _process_final_text returned: '{result[:50] if result else 'None'}...'")
+            return result
                 
         except KeyboardInterrupt:
             if self.ui_manager:
@@ -229,7 +241,13 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             if self.ui_manager:
                 self.ui_manager.stop_recording()
             print(f"❌ Transcription error: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
+        finally:
+            # Always notify that wake word recording stopped
+            if self.event_manager:
+                self.event_manager.emit(RecordingEvent.WAKE_WORD_RECORDING_STOPPED)
     
     def continuous_listen(self, max_iterations=None):
         """
@@ -313,6 +331,72 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     def _on_vad_stop(self):
         """Called when voice activity stops"""
         print("🔇 Voice stopped")
+
+    
+    def _on_manual_stop_requested(self):
+        """Called when manual stop is requested via keyboard"""
+        print("⚡ Manual stop requested - forcing immediate transcription...")
+        self.manual_stop_requested = True
+        self.stop_event.set()
+
+    
+    def _process_final_text(self, text):
+        """Unified text processing for both normal and manual completion"""
+        if text and text.strip():
+            # Update GUI with final text and hide it
+            if self.ui_manager:
+                self.ui_manager.update_transcription(text.strip(), is_final=True)
+                self.ui_manager.stop_recording()
+            
+            print(f"✅ Final transcription: '{text.strip()}'")
+            
+            # Use unified clipboard workflow (same as manual trigger mode)
+            if self.clipboard.copy_and_paste_text(text.strip()):
+                print("✅ Text successfully copied and pasted")
+            else:
+                print("❌ Failed to copy/paste - please paste manually (Cmd+V)")
+                
+            return text
+        else:
+            # Hide GUI if no speech detected
+            if self.ui_manager:
+                self.ui_manager.stop_recording()
+            print("ℹ️ No speech detected")
+            return ""
+    
+    def abort_recording(self):
+        """Stop recording but allow transcription of captured audio to complete"""
+        try:
+            print("🛑 Stopping recording (but allowing transcription to complete)...")
+            if hasattr(self, 'recorder') and self.recorder:
+                
+                # Use stop() instead of abort() to preserve captured audio for transcription
+                if hasattr(self.recorder, 'stop'):
+                    print("⏹️ Using recorder.stop() to preserve audio for transcription...")
+                    self.recorder.stop()
+                    
+                    # Now get the transcription of the captured audio
+                    print("📝 Getting transcription of captured audio...")
+                    if hasattr(self.recorder, 'text'):
+                        try:
+                            partial_text = self.recorder.text()
+                            print(f"📝 Got transcription: '{partial_text[:50]}...' (length: {len(partial_text) if partial_text else 0})")
+                            return partial_text
+                        except Exception as text_error:
+                            print(f"❌ Error getting transcription: {text_error}")
+                            return ""
+                    else:
+                        print("⚠️ No text() method found on recorder")
+                        return ""
+                else:
+                    print("⚠️ No stop() method found on recorder")
+                    return ""
+                
+        except Exception as e:
+            print(f"❌ Error stopping recording: {e}")
+            import traceback
+            traceback.print_exc()
+            return ""
     
     def cleanup(self):
         """Clean up resources"""
