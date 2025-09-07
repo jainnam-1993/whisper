@@ -208,6 +208,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             # Reset manual stop state
             self.manual_stop_requested = False
             self.stop_event.clear()
+            self.text_already_processed = False  # Reset flag for new recording session()
             
             # Clear transcription buffers for new recording
             self.last_transcription = ""
@@ -222,7 +223,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 print("⚡ Manual stop detected immediately - aborting...")
                 final_text = self.abort_recording()
             else:
-                # Normal flow - let recorder.text() handle VAD naturally
+                # Use recorder.text() but skip processing if manual stop happened
                 print("🔄 Starting normal transcription (with VAD silence detection)...")
                 try:
                     final_text = self.recorder.text()
@@ -233,10 +234,19 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             
             print(f"📝 Final transcription for processing: '{final_text[:50] if final_text else 'None'}...' (length: {len(final_text) if final_text else 0})")
             
-            # Use unified processing for both completion paths
-            result = self._process_final_text(final_text)
-            print(f"🔄 _process_final_text returned: '{result[:50] if result else 'None'}...'")
-            return result
+            # Skip processing if manual stop already handled it
+            if self.manual_stop_requested:
+                print("⏭️ Manual stop already processed text - skipping duplicate processing")
+                return ""
+            
+            # Use unified processing for natural completion only  
+            if final_text and final_text.strip():
+                result = self._process_final_text(final_text)
+                print(f"🔄 _process_final_text returned: '{result[:50] if result else 'None'}...'")
+                return result
+            else:
+                print("ℹ️ No speech detected")
+                return ""
                 
         except KeyboardInterrupt:
 
@@ -284,6 +294,10 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 text = self.transcribe()
                 if text and text.strip():
                     results.append(text.strip())
+                
+                # Reset manual stop flag for next iteration
+                if hasattr(self, 'manual_stop_requested'):
+                    self.manual_stop_requested = False
                 
                 time.sleep(0.5)  # Brief pause between iterations
                 
@@ -337,14 +351,46 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
 
     
     def _on_manual_stop_requested(self):
-        """Called when manual stop is requested via keyboard"""
-        print("⚡ Manual stop requested - forcing immediate transcription...")
-        self.manual_stop_requested = True
-        self.stop_event.set()
+        """Called when manual stop is requested via keyboard - unified transcription approach"""
+        print("⚡ Manual stop requested - using unified transcription...")
+        
+        try:
+            if hasattr(self, 'recorder') and self.recorder:
+                # Use same unified approach as double command: stop + text
+                # Use min_length_of_recording as backdate trim duration
+                trim_duration = self.min_length_of_recording
+                self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)
+                text = self.recorder.text()
+                
+                if text and text.strip():
+                    print(f"✅ Unified transcription: '{text.strip()}'")
+                    
+                    # Direct clipboard copy/paste (skip _process_final_text workflow)
+                    if self.clipboard.copy_and_paste_text(text.strip()):
+                        print("✅ Text successfully copied and pasted")
+                    else:
+                        print("❌ Failed to copy/paste - please paste manually (Cmd+V)")
+                else:
+                    print("⏹️ No transcription available")
+                    
+        except Exception as e:
+            print(f"❌ Error in unified transcription: {e}")
+        finally:
+            # Signal stop to main loop and mark processing as complete
+            self.manual_stop_requested = True
+            self.stop_event.set()
+            # Clear last_transcription to prevent duplicate processing
+            self.text_already_processed = True  # Flag to prevent double pasting
+            self.last_transcription = ""
 
     
     def _process_final_text(self, text):
         """Unified text processing for both normal and manual completion"""
+        # Skip if already processed by manual stop handler
+        if hasattr(self, 'text_already_processed') and self.text_already_processed:
+            print("⏭️ Text already processed by manual stop - skipping duplicate")
+            return text
+            
         if text and text.strip():
 
             

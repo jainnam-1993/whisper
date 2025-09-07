@@ -144,10 +144,9 @@ class RealtimeSTTCommunicator:
             else:
                 print("No speech detected yet")
 
-            # Wait for background thread to finish naturally (brief timeout)
-            if self.recording_thread and self.recording_thread.is_alive():
-                print("⏳ Waiting for recording thread to finish...")
-                self.recording_thread.join(timeout=1.0)
+            # Don't wait - we've already got the transcription
+            # Just mark thread as done (it will clean up on its own)
+            self.recording_thread = None
 
         except Exception as e:
             print(f"Error in stop_recording: {e}")
@@ -171,7 +170,7 @@ class DoubleCommandKeyListener:
         self.communicator = docker_communicator
         self.event_manager = event_manager
         self.key = keyboard.Key.cmd_r
-        self.last_press_time = 0
+        self.last_press_time = -999  # Initialize to negative to detect first press
 
     def on_key_press(self, key):
         try:
@@ -181,7 +180,7 @@ class DoubleCommandKeyListener:
                 
             if key == self.key:
                 current_time = time.time()
-                time_diff = current_time - self.last_press_time
+                time_diff = current_time - self.last_press_time if self.last_press_time > 0 else 999
 
                 print(f"🔍 DEBUG: Time since last press: {time_diff:.3f}s, is_transcribing: {self.communicator.is_transcribing}")
 
@@ -193,7 +192,7 @@ class DoubleCommandKeyListener:
                         self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STOPPED)
                     self.communicator.stop_recording()
                     
-                elif not self.communicator.is_transcribing and time_diff < 2.0 and time_diff > 0:
+                elif not self.communicator.is_transcribing and 0 < time_diff < 2.0:
                     # Double-click detected - start manual recording
                     print("✅ Double command detected - starting manual recording!")
                     if self.event_manager:

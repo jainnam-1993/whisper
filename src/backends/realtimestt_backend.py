@@ -158,6 +158,7 @@ class RealtimeSTTWrapper(TranscriptionService):
             import traceback
             traceback.print_exc()
             raise
+        
 
     def transcribe(self, audio_data=None, language=None):
         """
@@ -221,59 +222,28 @@ class RealtimeSTTWrapper(TranscriptionService):
             return ""
 
     def abort_and_transcribe(self):
-        """Immediately stop recording and return transcription of captured audio"""
+        """Unified transcription method using official stop() + text() pattern"""
         try:
-            # Force stop the recorder and get whatever was captured
             if hasattr(self, 'recorder') and self.recorder:
-                print("🛑 Force stopping RealtimeSTT recorder...")
+                print("🛑 Stopping RealtimeSTT recorder...")
                 
-                # In manual mode, we need to stop and get transcription
-                if self.post_speech_silence_duration is None:
-                    # Manual mode - stop recording and get text
-                    try:
-                        self.recorder.stop()
-                        text = self.recorder.text()
-                        print("✅ RealtimeSTT recorder stopped successfully")
-                        
-                        if text and text.strip():
-                            print(f"⚡ Manual transcription: '{text}'")
-                            return text
-                        else:
-                            print("⏹️ No transcription available yet - recording may have been too short")
-                            return ""
-                    except Exception as stop_error:
-                        print(f"⚠️ Could not stop recorder: {stop_error}")
-                        return ""
+                # Use unified approach: stop with backdate trimming + direct text retrieval
+                # Use min_length_of_recording from settings as backdate trim duration
+                trim_duration = self.settings.get('min_length_of_recording', 0.3)
+                self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)
+                text = self.recorder.text()
+                print("✅ RealtimeSTT recorder stopped successfully")
+                
+                if text and text.strip():
+                    print(f"⚡ Transcription: '{text}'")
+                    return text.strip()
                 else:
-                    # Auto mode - try to abort ongoing session
-                    try:
-                        # Check if recorder has an abort method
-                        if hasattr(self.recorder, 'abort'):
-                            self.recorder.abort()
-                            print("✅ RealtimeSTT recorder aborted successfully")
-                        elif hasattr(self.recorder, 'stop'):
-                            self.recorder.stop() 
-                            print("✅ RealtimeSTT recorder stopped successfully")
-                        else:
-                            print("⚠️ No abort/stop method found on recorder")
-                    except Exception as abort_error:
-                        print(f"⚠️ Could not abort recorder: {abort_error}")
-                    
-                    # Try to get best available text
-                    best_text = self.transcription_state.get_best_text()
-                    if best_text:
-                        state = self.transcription_state.get_state()
-                        if state.is_stable:
-                            print(f"🔄 Returning stabilized transcription: '{best_text}'")
-                        else:
-                            print(f"⚡ Returning partial transcription: '{best_text}'")
-                        return best_text
-                    else:
-                        print("⏹️ No transcription available yet - recording may have been too short")
-                        return ""
+                    print("⏹️ No transcription available - recording may have been too short")
+                    return ""
         except Exception as e:
             print(f"❌ Error in abort_and_transcribe: {e}")
             return ""
+
 
     def cleanup(self):
         """Clean up RealtimeSTT resources"""
@@ -334,27 +304,18 @@ class RealtimeSTTWrapper(TranscriptionService):
 # Duplicate method removed - consolidated above
 
 
-def create_transcription_service(model_name, language=None, use_realtimestt=False):
+def create_transcription_service(model_name, language=None):
     """
-    Factory function to create transcription service
+    Factory function to create RealtimeSTT transcription service
 
     Args:
         model_name: Whisper model (tiny, base, small, medium, large)
         language: Language code
-        use_realtimestt: Use RealtimeSTT backend (recommended)
 
     Returns:
-        TranscriptionService instance
+        RealtimeSTTWrapper instance
     """
-    if use_realtimestt:
-        return RealtimeSTTWrapper(model=model_name, language=language)
-    else:
-        # Fallback to existing WhisperTranscriptionService
-        from transcription_service import WhisperTranscriptionService
-        import whisper
-
-        model = whisper.load_model(model_name)
-        return WhisperTranscriptionService(model)
+    return RealtimeSTTWrapper(model=model_name, language=language)
 
 
 if __name__ == "__main__":
