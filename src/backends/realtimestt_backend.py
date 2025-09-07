@@ -6,6 +6,7 @@ Drop-in replacement for WhisperTranscriptionService using RealtimeSTT engine
 
 from RealtimeSTT import AudioToTextRecorder
 from .transcription_base import TranscriptionService
+from ..core.transcription_state import ThreadSafeTranscriptionState
 
 
 class RealtimeSTTWrapper(TranscriptionService):
@@ -63,9 +64,8 @@ class RealtimeSTTWrapper(TranscriptionService):
             self.wake_word_timeout = kwargs.get("wake_word_timeout")
             self.wake_word_activation_delay = kwargs.get("wake_word_activation_delay")
 
-        # Store partial transcription for interruption handling
-        self.partial_text = ""
-        self.last_complete_text = ""
+        # Unified transcription state management
+        self.transcription_state = ThreadSafeTranscriptionState()
 
         # Initialize RealtimeSTT recorder
         self._initialize_recorder()
@@ -173,9 +173,8 @@ class RealtimeSTTWrapper(TranscriptionService):
         try:
             print("📻 Starting recording with RealtimeSTT...")
 
-            # Clear previous partial text
-            self.partial_text = ""
-            self.last_complete_text = ""
+            # Clear previous transcription state
+            self.transcription_state.clear()
 
             # Check if we're in manual mode (no silence duration = keyboard mode)
             if self.post_speech_silence_duration is None:
@@ -193,25 +192,29 @@ class RealtimeSTTWrapper(TranscriptionService):
 
                 if text and text.strip():
                     print(f"✅ Complete transcription: '{text}'")
+                    self.transcription_state.update_text(text, is_final=True)
                     return text
-                elif self.partial_text and self.partial_text.strip():
-                    # If no complete text but we have partial text (e.g., from interruption)
-                    print(f"⚡ Using partial transcription: '{self.partial_text}'")
-                    return self.partial_text
-                elif self.last_complete_text and self.last_complete_text.strip():
-                    # If we had stabilized text during the session
-                    print(f"🔄 Using last stable transcription: '{self.last_complete_text}'")
-                    return self.last_complete_text
                 else:
-                    print("ℹ️ No speech detected")
-                    return ""
+                    # Check for best available text from state
+                    best_text = self.transcription_state.get_best_text()
+                    if best_text:
+                        state = self.transcription_state.get_state()
+                        if state.is_stable:
+                            print(f"🔄 Using stabilized transcription: '{best_text}'")
+                        else:
+                            print(f"⚡ Using partial transcription: '{best_text}'")
+                        return best_text
+                    else:
+                        print("ℹ️ No speech detected")
+                        return ""
 
         except KeyboardInterrupt:
             print("🛑 Recording interrupted by user")
-            # Return partial text if available when interrupted
-            if self.partial_text and self.partial_text.strip():
-                print(f"⚡ Returning partial from interrupt: '{self.partial_text}'")
-                return self.partial_text
+            # Return best available text when interrupted
+            best_text = self.transcription_state.get_best_text()
+            if best_text:
+                print(f"⚡ Returning text from interrupt: '{best_text}'")
+                return best_text
             return ""
         except Exception as e:
             print(f"❌ RealtimeSTT transcription error: {e}")
@@ -256,13 +259,15 @@ class RealtimeSTTWrapper(TranscriptionService):
                     except Exception as abort_error:
                         print(f"⚠️ Could not abort recorder: {abort_error}")
                     
-                    # Try to get partial transcription if available
-                    if self.partial_text and self.partial_text.strip():
-                        print(f"⚡ Returning partial transcription: '{self.partial_text}'")
-                        return self.partial_text
-                    elif self.last_complete_text and self.last_complete_text.strip():
-                        print(f"🔄 Returning last stable transcription: '{self.last_complete_text}'")
-                        return self.last_complete_text
+                    # Try to get best available text
+                    best_text = self.transcription_state.get_best_text()
+                    if best_text:
+                        state = self.transcription_state.get_state()
+                        if state.is_stable:
+                            print(f"🔄 Returning stabilized transcription: '{best_text}'")
+                        else:
+                            print(f"⚡ Returning partial transcription: '{best_text}'")
+                        return best_text
                     else:
                         print("⏹️ No transcription available yet - recording may have been too short")
                         return ""
@@ -298,14 +303,14 @@ class RealtimeSTTWrapper(TranscriptionService):
 
     def _on_realtime_update(self, text):
         """Called with partial transcription updates"""
-        self.partial_text = text
+        self.transcription_state.update_text(text, is_final=False, is_stable=False)
         # Only show real-time updates if real-time mode is enabled
         if self.enable_realtime:
             print(f"🔄 Partial: {text}")
 
     def _on_realtime_stabilized(self, text):
         """Called when transcription segment is stabilized"""
-        self.last_complete_text = text
+        self.transcription_state.update_text(text, is_final=False, is_stable=True)
         # Only show stabilized updates if real-time mode is enabled
         if self.enable_realtime:
             print(f"✅ Stable: {text}")
@@ -326,10 +331,7 @@ class RealtimeSTTWrapper(TranscriptionService):
 
         print("✅ Real-time mode enabled")
 
-    def _on_realtime_update(self, text):
-        """Handle real-time transcription updates (future enhancement)"""
-        print(f"📝 Real-time: {text}")
-        # Future: Send to UI for real-time display
+# Duplicate method removed - consolidated above
 
 
 def create_transcription_service(model_name, language=None, use_realtimestt=False):

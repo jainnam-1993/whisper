@@ -6,65 +6,12 @@ Extends the basic RealtimeSTT wrapper to include voice activation capabilities
 
 from RealtimeSTT import AudioToTextRecorder
 from ..backends.transcription_base import TranscriptionService
+from ..utils.clipboard import ClipboardManager
 import time
 import subprocess
 
 
-class ClipboardManager:
-    """Handles copying text to clipboard with preservation support"""
-    
-    def __init__(self):
-        self.preserved_content = None
-    
-    def preserve_clipboard(self):
-        """Preserve current clipboard content"""
-        try:
-            result = subprocess.run(['pbpaste'], capture_output=True, text=True, check=True)
-            self.preserved_content = result.stdout
-            return True
-        except Exception:
-            self.preserved_content = None
-            return False
-    
-    def restore_clipboard(self):
-        """Restore previously preserved clipboard content"""
-        if self.preserved_content is not None:
-            try:
-                process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, close_fds=True)
-                process.communicate(input=self.preserved_content.encode('utf-8'))
-                return True
-            except:
-                pass
-        return False
-    
-    def copy_to_clipboard(self, text):
-        """Copy text to clipboard"""
-        try:
-            process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, close_fds=True)
-            process.communicate(input=text.encode('utf-8'))
-            return True
-        except:
-            return False
-    
-    def paste_from_clipboard(self):
-        """Paste using AppleScript - most reliable on macOS"""
-        try:
-            from accessibility_utils import _execute_applescript_safely
-            result = _execute_applescript_safely(
-                'tell application "System Events" to keystroke "v" using command down'
-            )
-            return result is not None
-        except:
-            # Fallback to keyboard simulation
-            try:
-                from pynput import keyboard
-                keyboard_controller = keyboard.Controller()
-                with keyboard_controller.pressed(keyboard.Key.cmd):
-                    keyboard_controller.press('v')
-                    keyboard_controller.release('v')
-                return True
-            except:
-                return False
+# ClipboardManager moved to src/utils/clipboard.py
 
 
 class WakeWordRealtimeSTTWrapper(TranscriptionService):
@@ -108,8 +55,6 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         
         # GUI support
         self.ui_manager = None
-        self.real_time_text = ""  # For GUI display
-        self.final_text = ""      # For accurate paste
         
         # Supported wake words for pvporcupine
         self.supported_wake_words = [
@@ -214,21 +159,11 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 if text and text.strip():
                     print(f"✅ Transcribed: '{text.strip()}'")
                     
-                    # Use exact same clipboard workflow as keyboard trigger
-                    self.clipboard.preserve_clipboard()
-                    
-                    if self.clipboard.copy_to_clipboard(text):
-                        print("Text copied to clipboard")
-                        time.sleep(0.5)
-                        
-                        if self.clipboard.paste_from_clipboard():
-                            print("Text pasted from clipboard")
-                            time.sleep(0.5)
-                            self.clipboard.restore_clipboard()
-                        else:
-                            print("Failed to paste - please paste manually (Cmd+V)")
+                    # Use unified clipboard workflow
+                    if self.clipboard.copy_and_paste_text(text):
+                        print("Text successfully copied and pasted")
                     else:
-                        print("Failed to copy text to clipboard")
+                        print("Failed to copy/paste - please paste manually (Cmd+V)")
                     
                     return text
                 else:
@@ -272,23 +207,11 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 
                 print(f"✅ Final transcription: '{final_text.strip()}'")
                 
-                # Use exact same clipboard workflow as keyboard trigger
-                self.clipboard.preserve_clipboard()
-                
-                if self.clipboard.copy_to_clipboard(final_text.strip()):
-                    print("📋 Text copied to clipboard")
-                    time.sleep(0.5)
-                    
-                    if self.clipboard.paste_from_clipboard():
-                        print("✅ Text pasted successfully")
-                        time.sleep(0.5)
-                        self.clipboard.restore_clipboard()
-                        print("🔄 Original clipboard restored")
-                    else:
-                        print("❌ Failed to paste - please paste manually (Cmd+V)")
-                        self.clipboard.restore_clipboard()
+                # Use unified clipboard workflow
+                if self.clipboard.copy_and_paste_text(final_text.strip()):
+                    print("✅ Text successfully copied and pasted")
                 else:
-                    print("❌ Failed to copy text to clipboard")
+                    print("❌ Failed to copy/paste - please paste manually (Cmd+V)")
                 return final_text
             else:
                 # Hide GUI if no speech detected
@@ -350,7 +273,6 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     # Real-time transcription callbacks for GUI
     def _on_realtime_update(self, text):
         """Update GUI with real-time transcription"""
-        self.real_time_text = text
         if self.ui_manager:
             self.ui_manager.update_transcription(text, is_final=False)
         # Real-time logging removed - you requested chunked mode only

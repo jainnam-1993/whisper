@@ -47,152 +47,12 @@ import sys
 import fcntl
 from pynput import keyboard
 from ..utils.accessibility import _execute_applescript_safely
+from ..utils.clipboard import ClipboardManager
+from ..utils.process import SingleInstanceLock, create_daemon_thread
 
-class SingleInstanceLock:
-    """Ensures only one instance of the application runs at a time"""
+# SingleInstanceLock moved to src/utils/process.py
 
-    def __init__(self, lock_file_path=None):
-        self.lock_file_path = lock_file_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '.host_key_listener.lock'
-        )
-        self.lock_file = None
-
-    def acquire(self):
-        """Try to acquire the lock. Return True if successful, False otherwise."""
-        try:
-            self.lock_file = open(self.lock_file_path, 'w')
-            fcntl.lockf(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Write PID to the lock file
-            self.lock_file.write(str(os.getpid()))
-            self.lock_file.flush()
-            return True
-        except IOError:
-            # Another instance has the lock
-            if self.lock_file:
-                self.lock_file.close()
-            return False
-
-    def release(self):
-        """Release the lock"""
-        if self.lock_file:
-            fcntl.lockf(self.lock_file, fcntl.LOCK_UN)
-            self.lock_file.close()
-            try:
-                os.unlink(self.lock_file_path)
-            except:
-                pass
-
-class ClipboardManager:
-    """Handles copying text to clipboard with preservation support"""
-
-    def __init__(self):
-        self.preserved_content = None
-
-    def preserve_clipboard(self):
-        """Preserve current clipboard content"""
-        try:
-            result = subprocess.run(['pbpaste'], capture_output=True, text=True, check=True)
-            self.preserved_content = result.stdout
-            print(f"Preserved clipboard content ({len(self.preserved_content)} chars)")
-            return True
-        except Exception as e:
-            print(f"Warning: Could not preserve clipboard: {e}")
-            self.preserved_content = None
-            return False
-
-    def restore_clipboard(self):
-        """Restore previously preserved clipboard content"""
-        if self.preserved_content is not None:
-            try:
-                process = subprocess.Popen(
-                    ['pbcopy'],
-                    stdin=subprocess.PIPE,
-                    close_fds=True
-                )
-                process.communicate(input=self.preserved_content.encode('utf-8'))
-                print(f"✓ Restored original clipboard content ({len(self.preserved_content)} chars)")
-                return True
-            except Exception as e:
-                print(f"Warning: Could not restore clipboard: {e}")
-                return False
-        else:
-            print("No preserved clipboard content to restore")
-            return False
-
-    @staticmethod
-    def copy_to_clipboard(text):
-        try:
-            # Use pbcopy on macOS
-            process = subprocess.Popen(
-                ['pbcopy'],
-                stdin=subprocess.PIPE,
-                close_fds=True
-            )
-            process.communicate(input=text.encode('utf-8'))
-            return True
-        except Exception as e:
-            print(f"Error copying to clipboard: {e}")
-            traceback.print_exc()
-            return False
-
-    @staticmethod
-    def paste_from_clipboard_applescript():
-        """Uses AppleScript to paste from clipboard - more reliable on macOS"""
-        try:
-            print("Attempting to paste with AppleScript...")
-            # Create AppleScript to paste content from clipboard
-            applescript = '''
-            try
-                tell application "System Events"
-                    set frontApp to name of first application process whose frontmost is true
-                    log "Current frontmost app: " & frontApp
-                    keystroke "v" using command down
-                    return "success"
-                end tell
-            on error errMsg
-                log "Error in AppleScript: " & errMsg
-                return "error: " & errMsg
-            end try
-            '''
-
-            # Execute the AppleScript securely
-            result = _execute_applescript_safely(applescript, timeout=5)
-            print(f"AppleScript result: stdout={result.stdout.strip()}, stderr={result.stderr.strip()}")
-
-            if result.returncode == 0 and "error:" not in result.stdout:
-                print("AppleScript paste seems successful")
-                return True
-            else:
-                print(f"AppleScript paste failed: {result.stderr or result.stdout}")
-                return False
-        except (RuntimeError, ValueError) as e:
-            print(f"Secure AppleScript execution failed: {e}")
-            return False
-        except Exception as e:
-            print(f"Error pasting with AppleScript: {e}")
-            traceback.print_exc()
-            return False
-
-    @staticmethod
-    def paste_from_clipboard():
-        """First tries AppleScript, then falls back to keyboard simulation"""
-        # Try AppleScript first
-        if ClipboardManager.paste_from_clipboard_applescript():
-            return True
-
-        # Fallback to keyboard simulation
-        try:
-            # Use keyboard shortcut to paste
-            keyboard_controller = keyboard.Controller()
-            with keyboard_controller.pressed(keyboard.Key.cmd):
-                keyboard_controller.press('v')
-                keyboard_controller.release('v')
-            return True
-        except Exception as e:
-            print(f"Error pasting from clipboard: {e}")
-            traceback.print_exc()
-            return False
+# ClipboardManager moved to src/utils/clipboard.py
 
 class RealtimeSTTCommunicator:
     """RealtimeSTT backend for keyboard-triggered transcription"""
@@ -212,7 +72,7 @@ class RealtimeSTTCommunicator:
             print(f"Error: RealtimeSTT not available: {e}")
             raise
 
-        self.clipboard = ClipboardManager()  # Reuse existing clipboard manager
+        self.clipboard = ClipboardManager()  # Use shared clipboard manager
         self.is_transcribing = False
         self.settings = settings or {}
         self.recording_thread = None
@@ -243,21 +103,11 @@ class RealtimeSTTCommunicator:
                 if transcription and transcription.strip():
                     print(f"Transcription completed: {transcription}")
 
-                    # Copy and paste transcription
-                    self.clipboard.preserve_clipboard()
-
-                    if self.clipboard.copy_to_clipboard(transcription):
-                        print("Text copied to clipboard")
-                        time.sleep(0.5)
-
-                        if self.clipboard.paste_from_clipboard():
-                            print("Text pasted from clipboard")
-                            time.sleep(0.5)
-                            self.clipboard.restore_clipboard()
-                        else:
-                            print("Failed to paste - please paste manually (Cmd+V)")
+                    # Use unified clipboard workflow
+                    if self.clipboard.copy_and_paste_text(transcription):
+                        print("Text successfully copied and pasted")
                     else:
-                        print("Failed to copy text to clipboard")
+                        print("Failed to copy/paste - please paste manually (Cmd+V)")
                 elif not transcription or not transcription.strip():
                     print("No speech detected")
 
@@ -268,7 +118,10 @@ class RealtimeSTTCommunicator:
                 self.is_transcribing = False
 
         # Start recording in background (like original subprocess.Popen)
-        self.recording_thread = threading.Thread(target=record_in_background, daemon=True)
+        self.recording_thread = create_daemon_thread(
+            target=record_in_background,
+            name="RealtimeSTT-Recording"
+        )
         self.recording_thread.start()
 
     def stop_recording(self):
@@ -287,21 +140,11 @@ class RealtimeSTTCommunicator:
             if transcription and transcription.strip():
                 print(f"Transcription from manual stop: {transcription}")
 
-                # Copy and paste transcription
-                self.clipboard.preserve_clipboard()
-
-                if self.clipboard.copy_to_clipboard(transcription):
-                    print("Text copied to clipboard")
-                    time.sleep(0.5)
-
-                    if self.clipboard.paste_from_clipboard():
-                        print("Text pasted from clipboard")
-                        time.sleep(0.5)
-                        self.clipboard.restore_clipboard()
-                    else:
-                        print("Failed to paste - please paste manually (Cmd+V)")
+                # Use unified clipboard workflow
+                if self.clipboard.copy_and_paste_text(transcription):
+                    print("Text successfully copied and pasted")
                 else:
-                    print("Failed to copy text to clipboard")
+                    print("Failed to copy/paste - please paste manually (Cmd+V)")
             else:
                 print("No speech detected yet")
 
@@ -416,7 +259,10 @@ def main():
                     except Exception as e:
                         print(f"Wake word listener error: {e}")
 
-                wake_word_thread = threading.Thread(target=run_wake_word_listener, daemon=True)
+                wake_word_thread = create_daemon_thread(
+                    target=run_wake_word_listener,
+                    name="WakeWord-Listener"
+                )
                 wake_word_thread.start()
                 print("✅ Wake word listener started in background with GUI support")
 
