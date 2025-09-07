@@ -56,8 +56,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         self.min_gap_between_recordings = min_gap_between_recordings
         self.clipboard = ClipboardManager()
         
-        # GUI support
-        self.ui_manager = None
+
         
         # Event system for manual stop capability
         self.event_manager = event_manager
@@ -67,6 +66,10 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         # Subscribe to manual stop events if event manager provided
         if self.event_manager:
             self.event_manager.subscribe(RecordingEvent.MANUAL_STOP_REQUESTED, self._on_manual_stop_requested)
+        
+        # Transcription buffer for manual stop scenarios
+        self.last_transcription = ""  # Store transcription from callbacks
+        self.transcription_buffer = []  # Store all chunks for manual stop
         
         # Supported wake words for pvporcupine
         self.supported_wake_words = [
@@ -207,6 +210,10 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             self.manual_stop_requested = False
             self.stop_event.clear()
             
+            # Clear transcription buffers for new recording
+            self.last_transcription = ""
+            self.transcription_buffer = []
+            
             # Notify that wake word recording started
             if self.event_manager:
                 self.event_manager.emit(RecordingEvent.WAKE_WORD_RECORDING_STARTED)
@@ -233,13 +240,11 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             return result
                 
         except KeyboardInterrupt:
-            if self.ui_manager:
-                self.ui_manager.stop_recording()
+
             print("🛑 Transcription interrupted")
             return ""
         except Exception as e:
-            if self.ui_manager:
-                self.ui_manager.stop_recording()
+
             print(f"❌ Transcription error: {e}")
             import traceback
             traceback.print_exc()
@@ -290,23 +295,22 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     
     # Real-time transcription callbacks for GUI
     def _on_realtime_update(self, text):
-        """Update GUI with real-time transcription"""
-        if self.ui_manager:
-            self.ui_manager.update_transcription(text, is_final=False)
-        # Real-time logging removed - you requested chunked mode only
+        """Real-time transcription callback - not used in chunk mode"""
+        # Real-time logging removed - using chunked mode only
+        pass
     
     def _on_stabilized_update(self, text):
-        """Update GUI with stabilized segments"""
-        if self.ui_manager:
-            self.ui_manager.update_transcription(text, is_final=False)
+        """Store stabilized segments for manual stop scenario"""
+        if text and text.strip():
+            # Store for manual stop scenario
+            self.transcription_buffer.append(text.strip())
+            self.last_transcription = " ".join(self.transcription_buffer)
     
     # Event callback methods
     def _on_wake_word_detected(self):
         """Called when wake word is detected"""
         print("🚨 Wake word detected! Listening for speech...")
-        # Show GUI when wake word detected
-        if self.ui_manager:
-            self.ui_manager.start_recording()
+
     
     def _on_wake_word_timeout(self):
         """Called when no speech follows wake word"""
@@ -343,10 +347,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     def _process_final_text(self, text):
         """Unified text processing for both normal and manual completion"""
         if text and text.strip():
-            # Update GUI with final text and hide it
-            if self.ui_manager:
-                self.ui_manager.update_transcription(text.strip(), is_final=True)
-                self.ui_manager.stop_recording()
+
             
             print(f"✅ Final transcription: '{text.strip()}'")
             
@@ -359,41 +360,39 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             return text
         else:
             # Hide GUI if no speech detected
-            if self.ui_manager:
-                self.ui_manager.stop_recording()
+
             print("ℹ️ No speech detected")
             return ""
     
     def abort_recording(self):
-        """Stop recording but allow transcription of captured audio to complete"""
+        """Stop recording and return any captured text"""
         try:
-            print("🛑 Stopping recording (but allowing transcription to complete)...")
+            print("🛑 Aborting recording...")
             if hasattr(self, 'recorder') and self.recorder:
-                
-                # Use stop() instead of abort() to preserve captured audio for transcription
-                if hasattr(self.recorder, 'stop'):
-                    print("⏹️ Using recorder.stop() to preserve audio for transcription...")
+                # Use abort() to stop immediately without waiting
+                if hasattr(self.recorder, 'abort'):
+                    self.recorder.abort()
+                    print("✅ Recorder aborted")
+                elif hasattr(self.recorder, 'stop'):
                     self.recorder.stop()
-                    
-                    # Now get the transcription of the captured audio
-                    print("📝 Getting transcription of captured audio...")
-                    if hasattr(self.recorder, 'text'):
-                        try:
-                            partial_text = self.recorder.text()
-                            print(f"📝 Got transcription: '{partial_text[:50]}...' (length: {len(partial_text) if partial_text else 0})")
-                            return partial_text
-                        except Exception as text_error:
-                            print(f"❌ Error getting transcription: {text_error}")
-                            return ""
-                    else:
-                        print("⚠️ No text() method found on recorder")
-                        return ""
-                else:
-                    print("⚠️ No stop() method found on recorder")
-                    return ""
+                    print("✅ Recorder stopped")
                 
+                # Return accumulated transcription from callbacks
+                result = self.last_transcription
+                
+                # Clear for next use
+                self.last_transcription = ""
+                self.transcription_buffer = []
+                
+                if result:
+                    print(f"📝 Returning captured text: '{result[:50]}...'")
+                    return result
+                else:
+                    print("ℹ️ No text captured before abort")
+                    return ""
+                    
         except Exception as e:
-            print(f"❌ Error stopping recording: {e}")
+            print(f"❌ Error in abort_recording: {e}")
             import traceback
             traceback.print_exc()
             return ""
