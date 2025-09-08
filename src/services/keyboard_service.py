@@ -9,8 +9,8 @@ CONFIG = {
     "transcription_backend": "realtimestt",  # Only RealtimeSTT supported
     "model_name": "medium",
     "language": "en",
-    
-    
+
+
     # Double command key specific settings (manual control)
     "keyboard_settings": {
         "enable_realtime": False,
@@ -27,7 +27,6 @@ import time
 import traceback
 import sys
 from pynput import keyboard
-from ..utils.clipboard import ClipboardManager
 from ..utils.process import SingleInstanceLock, create_daemon_thread
 from ..utils.recording_events import RecordingEvent
 
@@ -43,19 +42,19 @@ class RealtimeSTTCommunicator:
         try:
             from ..backends.realtimestt_backend import RealtimeSTTWrapper
             from ..utils.clipboard import TranscriptionHandler, ClipboardManager
-            
+
             # For keyboard trigger: use direct recording
             self.transcription_service = RealtimeSTTWrapper(
                 model=model,
                 language=language,
                 wake_words=None,
-                config=settings  # Pass entire config dict
+                config=settings.get('keyboard_settings', {})  # Pass keyboard-specific config
             )
-            
+
             # Use centralized transcription handler
             clipboard = ClipboardManager()
             self.transcription_handler = TranscriptionHandler(clipboard)
-            
+
         except ImportError as e:
             print(f"Error: RealtimeSTT not available: {e}")
             raise
@@ -122,7 +121,7 @@ class RealtimeSTTCommunicator:
         try:
             # Force immediate transcription of whatever was captured
             transcription = self.transcription_service.abort_and_transcribe()
-            
+
             # Route through single transcription handler
             if transcription and transcription.strip():
                 self.transcription_handler.handle_transcription(
@@ -143,7 +142,7 @@ class RealtimeSTTCommunicator:
 def create_backend(config):
     """Create RealtimeSTT backend with keyboard settings"""
     keyboard_settings = config.get("keyboard_settings", {})
-    
+
     return RealtimeSTTCommunicator(
         model=config.get("model_name", "base"),
         language=config.get("language", "en"),
@@ -164,7 +163,7 @@ class DoubleCommandKeyListener:
             # Debug: Log all right command key presses
             if key == self.key:
                 print(f"🔍 DEBUG: Right Command key pressed at {time.time()}")
-                
+
             if key == self.key:
                 current_time = time.time()
                 # Calculate time difference from last press
@@ -178,15 +177,15 @@ class DoubleCommandKeyListener:
                     if self.event_manager:
                         self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STARTED)
                     self.communicator.start_recording()
-                    
+
                 # Priority 2: If manual recording is active, stop it
                 elif self.communicator.is_transcribing:
                     print("🛑 Manual recording active - stopping recording")
                     if self.event_manager:
                         self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STOPPED)
                     self.communicator.stop_recording()
-                    
-                # Priority 3: Single press with no active recording - just update timestamp  
+
+                # Priority 3: Single press with no active recording - just update timestamp
                 else:
                     print("⏸️ Single press - waiting for double-click...")
 
