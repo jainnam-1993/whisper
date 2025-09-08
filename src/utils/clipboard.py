@@ -90,28 +90,14 @@ class ClipboardManager:
             return False
         
         try:
-            # Use pbcopy with verification and retries (most reliable on macOS)
-            for retry in range(3):
-                process = subprocess.Popen(
-                    ['pbcopy'],
-                    stdin=subprocess.PIPE,
-                    close_fds=True
-                )
-                process.communicate(input=text.encode('utf-8'))
-                
-                # Verify clipboard contents
-                time.sleep(0.2)  # Allow clipboard update
-                try:
-                    verify_result = subprocess.run(['pbpaste'], capture_output=True, text=True, check=True)
-                    if verify_result.stdout == text:
-                        return True
-                except:
-                    pass
-                
-                time.sleep(0.1)  # Brief pause before retry
-            
-            print("Failed to verify clipboard contents after 3 attempts")
-            return False
+            # Use pbcopy - simple and direct, no retries needed
+            process = subprocess.Popen(
+                ['pbcopy'],
+                stdin=subprocess.PIPE,
+                close_fds=True
+            )
+            process.communicate(input=text.encode('utf-8'))
+            return True
             
         except Exception as e:
             print(f"Error copying to clipboard: {e}")
@@ -236,6 +222,62 @@ class ClipboardManager:
             # Always try to restore clipboard
             if not hasattr(self, '_restored'):
                 self.restore_clipboard()
+
+
+class TranscriptionHandler:
+    """
+    Single responsibility class for handling ALL transcription pasting.
+    Eliminates duplicate paste operations by centralizing the workflow.
+    """
+    
+    def __init__(self, clipboard_manager: ClipboardManager):
+        self.clipboard = clipboard_manager
+        self._processed_texts = set()  # Prevent duplicate processing of same text
+    
+    def handle_transcription(self, text: str, source: str) -> bool:
+        """
+        Single point for ALL transcription pasting - no duplicates.
+        
+        Args:
+            text: Transcribed text to paste
+            source: Source identifier for logging (manual/wake_word_natural/wake_word_manual)
+            
+        Returns:
+            bool: True if pasted successfully, False otherwise
+        """
+        if not text or not text.strip():
+            print(f"⚠️ No text to paste from {source}")
+            return False
+            
+        text = text.strip()
+        
+        # Create unique key for this transcription
+        text_key = f"{source}:{text[:50]}"  # First 50 chars + source
+        
+        if text_key in self._processed_texts:
+            print(f"🚫 Duplicate transcription blocked from {source}: '{text[:50]}...'")
+            return False
+            
+        # Mark as processed BEFORE pasting to prevent race conditions
+        self._processed_texts.add(text_key)
+        
+        print(f"📝 Processing transcription from {source}: '{text}'")
+        
+        success = self.clipboard.copy_and_paste_text(text)
+        
+        if success:
+            print(f"✅ Text successfully pasted from {source}")
+        else:
+            print(f"❌ Failed to paste text from {source}")
+            # Remove from processed set on failure so it can be retried
+            self._processed_texts.discard(text_key)
+            
+        return success
+    
+    def clear_processed_texts(self):
+        """Clear the processed texts cache - useful for testing"""
+        self._processed_texts.clear()
+        print("🧹 Cleared processed texts cache")
 
 
 # Legacy compatibility - keep existing imports working

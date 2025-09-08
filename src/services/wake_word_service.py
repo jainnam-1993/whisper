@@ -173,11 +173,9 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 if text and text.strip():
                     print(f"✅ Transcribed: '{text.strip()}'")
                     
-                    # Use unified clipboard workflow
-                    if self.clipboard.copy_and_paste_text(text):
-                        print("Text successfully copied and pasted")
-                    else:
-                        print("Failed to copy/paste - please paste manually (Cmd+V)")
+                    # This code path appears to be dead code - the transcribe() method
+                    # handles all the pasting. Removing to prevent double paste.
+                    # The transcribe() method calls _process_final_text() which does the paste
                     
                     return text
                 else:
@@ -238,7 +236,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             print(f"📝 Final transcription for processing: '{final_text[:50] if final_text else 'None'}...' (length: {len(final_text) if final_text else 0})")
             
             # Skip processing if manual stop already handled it
-            if self.manual_stop_requested:
+            if self.manual_stop_requested or self.text_already_processed:
                 print("⏭️ Manual stop already processed text - skipping duplicate processing")
                 return ""
             
@@ -357,37 +355,22 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
 
     
     def _on_manual_stop_requested(self):
-        """Called when manual stop is requested via keyboard - unified transcription approach"""
-        print("⚡ Manual stop requested - using unified transcription...")
+        """Called when manual stop is requested via keyboard"""
+        print("⚡ Manual stop requested - stopping recorder...")
         
         try:
             if hasattr(self, 'recorder') and self.recorder:
-                # Use unified approach: stop with backdate trimming + direct text retrieval
-                # Use min_length_of_recording as backdate trim duration
+                # Just stop the recorder, don't get text here
+                # Let the main transcribe() method handle getting and pasting text
                 trim_duration = self.min_length_of_recording
                 self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)
-                text = self.recorder.text()
-                
-                if text and text.strip():
-                    print(f"✅ Unified transcription: '{text.strip()}'")
-                    
-                    # Direct clipboard copy/paste (skip _process_final_text workflow)
-                    if self.clipboard.copy_and_paste_text(text.strip()):
-                        print("✅ Text successfully copied and pasted")
-                    else:
-                        print("❌ Failed to copy/paste - please paste manually (Cmd+V)")
-                else:
-                    print("⏹️ No transcription available")
-                    
+                print("⏹️ Recorder stopped by manual request")
         except Exception as e:
-            print(f"❌ Error in unified transcription: {e}")
+            print(f"❌ Error stopping recorder: {e}")
         finally:
-            # Signal stop to main loop and mark processing as complete
+            # Signal that manual stop was requested
             self.manual_stop_requested = True
             self.stop_event.set()
-            # Clear last_transcription to prevent duplicate processing
-            self.text_already_processed = True  # Flag to prevent double pasting
-            self.last_transcription = ""
 
     
     def _process_final_text(self, text):

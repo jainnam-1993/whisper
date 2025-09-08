@@ -96,7 +96,10 @@ class RealtimeSTTCommunicator:
                 transcription = self.transcription_service.transcribe()
 
                 # Process transcription whether stopped early or completed naturally
-                if transcription and transcription.strip():
+                if self.stop_requested:
+                    # If stop was requested, transcription was already handled in stop_recording()
+                    print("⏭️ Transcription already handled by stop_recording()")
+                elif transcription and transcription.strip():
                     print(f"Transcription completed: {transcription}")
 
                     # Use unified clipboard workflow
@@ -135,8 +138,7 @@ class RealtimeSTTCommunicator:
             # Process transcription immediately
             if transcription and transcription.strip():
                 print(f"Transcription from manual stop: {transcription}")
-
-                # Use unified clipboard workflow
+                # Paste here since we're aborting the background thread
                 if self.clipboard.copy_and_paste_text(transcription):
                     print("Text successfully copied and pasted")
                 else:
