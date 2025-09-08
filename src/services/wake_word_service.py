@@ -214,9 +214,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
             self.last_transcription = ""
             self.transcription_buffer = []
             
-            # Notify that wake word recording started
-            if self.event_manager:
-                self.event_manager.emit(RecordingEvent.WAKE_WORD_RECORDING_STARTED)
+            # Don't emit recording started here - wait for actual wake word detection
             
             # Check if manual stop was requested while we were starting
             if self.stop_event.wait(timeout=0.1):
@@ -227,7 +225,12 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
                 print("🔄 Starting normal transcription (with VAD silence detection)...")
                 try:
                     final_text = self.recorder.text()
-                    print(f"🔄 Normal transcription completed: '{final_text[:50] if final_text else 'None'}...'")
+                    # Check if manual stop happened while we were waiting for text
+                    if self.manual_stop_requested or self.text_already_processed:
+                        print("⏭️ Manual stop occurred during transcription - discarding duplicate text")
+                        final_text = ""
+                    else:
+                        print(f"🔄 Normal transcription completed: '{final_text[:50] if final_text else 'None'}...'")
                 except Exception as e:
                     print(f"❌ Normal transcription error: {e}")
                     final_text = ""
@@ -323,6 +326,9 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
     def _on_wake_word_detected(self):
         """Called when wake word is detected"""
         print("🚨 Wake word detected! Listening for speech...")
+        # Now emit that we're actually recording (not just listening for wake word)
+        if self.event_manager:
+            self.event_manager.emit(RecordingEvent.WAKE_WORD_RECORDING_STARTED)
 
     
     def _on_wake_word_timeout(self):
@@ -356,7 +362,7 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         
         try:
             if hasattr(self, 'recorder') and self.recorder:
-                # Use same unified approach as double command: stop + text
+                # Use unified approach: stop with backdate trimming + direct text retrieval
                 # Use min_length_of_recording as backdate trim duration
                 trim_duration = self.min_length_of_recording
                 self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)

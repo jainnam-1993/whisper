@@ -30,7 +30,7 @@ CONFIG = {
         "enable_realtime": False,
         "pre_buffer_duration": 1.5,
         "vad_sensitivity": 0.3,
-        # NO post_speech_silence_duration - manual control only
+        "post_speech_silence_duration": None,  # Explicit None for manual control
         "webrtc_sensitivity": 2,
         "min_length_of_recording": 0.3,
         "min_gap_between_recordings": 0.5
@@ -170,7 +170,7 @@ class DoubleCommandKeyListener:
         self.communicator = docker_communicator
         self.event_manager = event_manager
         self.key = keyboard.Key.cmd_r
-        self.last_press_time = -999  # Initialize to negative to detect first press
+        self.last_press_time = 0  # Initialize to 0
 
     def on_key_press(self, key):
         try:
@@ -180,29 +180,33 @@ class DoubleCommandKeyListener:
                 
             if key == self.key:
                 current_time = time.time()
+                # Calculate time difference from last press
                 time_diff = current_time - self.last_press_time if self.last_press_time > 0 else 999
 
                 print(f"🔍 DEBUG: Time since last press: {time_diff:.3f}s, is_transcribing: {self.communicator.is_transcribing}")
 
-                # MANUAL MODE LOGIC: Handle manual recording (takes priority)
-                if self.communicator.is_transcribing:
-                    # Manual recording is active - single press stops it
-                    print("🛑 Manual recording active - stopping recording")
-                    if self.event_manager:
-                        self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STOPPED)
-                    self.communicator.stop_recording()
-                    
-                elif not self.communicator.is_transcribing and 0 < time_diff < 2.0:
-                    # Double-click detected - start manual recording
+                # Priority 1: Check for double-click FIRST (before wake word check)
+                if 0 < time_diff < 2.0 and not self.communicator.is_transcribing:
                     print("✅ Double command detected - starting manual recording!")
                     if self.event_manager:
                         self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STARTED)
                     self.communicator.start_recording()
                     
-                # WAKE WORD MODE LOGIC: Only handle if wake word is actively recording
+                # Priority 2: If manual recording is active, stop it
+                elif self.communicator.is_transcribing:
+                    print("🛑 Manual recording active - stopping recording")
+                    if self.event_manager:
+                        self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STOPPED)
+                    self.communicator.stop_recording()
+                    
+                # Priority 3: If wake word is recording, stop it (only if not double-click)
                 elif self.event_manager and self.event_manager.is_wake_word_recording():
                     print("🎤 Wake word recording active - single press will stop recording")
                     self.event_manager.emit(RecordingEvent.MANUAL_STOP_REQUESTED)
+                    
+                # Priority 4: Single press with no active recording - just update timestamp
+                else:
+                    print("⏸️ Single press - waiting for double-click or wake word...")
 
                 self.last_press_time = current_time
         except Exception as e:

@@ -181,12 +181,12 @@ class RealtimeSTTWrapper(TranscriptionService):
             if self.post_speech_silence_duration is None:
                 # Manual mode - we control start/stop, no VAD
                 print("🎯 Using manual recording mode (no VAD)")
+                import threading
+                self.manual_mode_event = threading.Event()
                 self.recorder.start()
                 # In keyboard mode, this will be stopped by abort_and_transcribe()
                 # We block here until manually stopped
-                import time
-                while True:
-                    time.sleep(0.1)  # Keep alive until abort_and_transcribe() is called
+                self.manual_mode_event.wait()  # Will be set by abort_and_transcribe()
             else:
                 # Automatic mode - RealtimeSTT handles all the audio capture and processing with VAD
                 text = self.recorder.text()
@@ -224,12 +224,16 @@ class RealtimeSTTWrapper(TranscriptionService):
     def abort_and_transcribe(self):
         """Unified transcription method using official stop() + text() pattern"""
         try:
+            # Set the manual mode event if we're in manual mode
+            if hasattr(self, 'manual_mode_event'):
+                self.manual_mode_event.set()
+                
             if hasattr(self, 'recorder') and self.recorder:
                 print("🛑 Stopping RealtimeSTT recorder...")
                 
                 # Use unified approach: stop with backdate trimming + direct text retrieval
                 # Use min_length_of_recording from settings as backdate trim duration
-                trim_duration = self.settings.get('min_length_of_recording', 0.3)
+                trim_duration = self.settings.get('min_length_of_recording', 0.3) if hasattr(self, 'settings') else 0.3
                 self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)
                 text = self.recorder.text()
                 print("✅ RealtimeSTT recorder stopped successfully")

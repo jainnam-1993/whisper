@@ -3,33 +3,110 @@
 ## Project Overview
 Voice-to-text system using RealtimeSTT with Whisper backend, supporting both wake word ("Jarvis") and manual double-command activation.
 
+## Project Structure
+```
+whisper/
+├── src/
+│   ├── backends/
+│   │   ├── realtimestt_backend.py    # RealtimeSTT wrapper (core recording logic)
+│   │   └── transcription_base.py     # Base transcription interface
+│   ├── services/
+│   │   ├── keyboard_service.py       # Double command & manual recording
+│   │   └── wake_word_service.py      # Wake word detection & processing
+│   ├── utils/
+│   │   ├── clipboard.py              # Clipboard copy/paste operations
+│   │   ├── recording_events.py       # Event system for inter-service communication
+│   │   ├── accessibility.py          # System accessibility helpers
+│   │   └── process.py                # Process/thread management
+│   └── core/
+│       └── transcription_state.py    # Transcription state tracking
+├── bin/
+│   └── run.sh                        # Launch script
+└── Jarvis_en_mac_v3_0_0.ppn         # Wake word model file
+```
+
 ## Architecture Summary
 
+### Two Independent Workflows
+
+#### 1. Double Command Workflow (Manual Trigger)
+**Flow**: Double Right Cmd → Recording starts → Right Cmd → Stop & Paste
+- **Entry Point**: `keyboard_service.py` → `DoubleCommandKeyListener`
+- **Recording**: `RealtimeSTTCommunicator` (separate instance)
+- **No wake words**: Direct recording without "Jarvis" detection
+- **Threading**: Background thread for recording
+
+#### 2. Wake Word Workflow  
+**Flow**: Say "Jarvis" → Recording starts → Right Cmd → Stop & Paste
+- **Entry Point**: `wake_word_service.py` → `WakeWordService`
+- **Recording**: `RealtimeSTTWrapper` with wake word detection
+- **Wake word**: "Jarvis" triggers recording
+- **Manual stop**: Via event system from keyboard service
+
 ### Core Components
-1. **RealtimeSTT Backend** (`src/backends/realtimestt_backend.py`)
-   - Manages the actual Whisper recorder instance
-   - Handles start/stop/text operations
-   - Uses `recorder.stop()` + `recorder.text()` pattern (NOT `abort()`)
 
-2. **Keyboard Service** (`src/services/keyboard_service.py`)
-   - Implements `DoubleCommandKeyListener` class
-   - Handles Right Command key detection
-   - Manages double-click logic for manual recording
+#### RealtimeSTT Backend (`src/backends/realtimestt_backend.py`)
+- **Class**: `RealtimeSTTWrapper`
+- **Purpose**: Wraps RealtimeSTT recorder with configuration
+- **Key Methods**:
+  - `transcribe()`: Main recording method (blocks until complete)
+  - `abort_and_transcribe()`: DEPRECATED - use stop() + text()
+  - `_initialize_recorder()`: Sets up recorder with callbacks
+- **Configuration**: Handles VAD, wake words, silence detection
 
-3. **Wake Word Service** (`src/services/wake_word_service.py`)
-   - Listens for "Jarvis" wake word
-   - Handles manual stop via Right Command during wake word recording
-   - Manages clipboard copy/paste operations
+#### Keyboard Service (`src/services/keyboard_service.py`)
+- **Classes**: 
+  - `RealtimeSTTCommunicator`: Manual recording handler
+  - `DoubleCommandKeyListener`: Key press detection
+- **Key Logic**:
+  - Tracks `last_press_time` for double-click detection
+  - Manages `is_transcribing` flag for state tracking
+  - Emits events for wake word integration
+
+#### Wake Word Service (`src/services/wake_word_service.py`)
+- **Class**: `WakeWordService`
+- **Key Methods**:
+  - `transcribe()`: Single recording session
+  - `_on_manual_stop_requested()`: Handles Right Cmd during recording
+  - `_process_final_text()`: Final text processing/pasting
+- **Event Integration**: Subscribes to `MANUAL_STOP_REQUESTED` event
+
+#### Utility Components
+- **ClipboardManager** (`src/utils/clipboard.py`): macOS clipboard operations
+- **RecordingEventManager** (`src/utils/recording_events.py`): Event bus for inter-service communication
+- **RecordingEvent** enum: Event types (MANUAL_STOP_REQUESTED, etc.)
 
 ## Current Issues & Root Causes
 
 ### 🐛 Issue 1: Double Command Not Working
-**Location**: `src/services/keyboard_service.py:172`
+**Location**: `src/services/keyboard_service.py:172` and line 182
+
+**Current Code (BROKEN after our fix):**
 ```python
-self.last_press_time = 0  # Initial value causes huge time_diff
+# Line 172 - We changed this to -999
+self.last_press_time = -999  
+
+# Line 182 - But this logic is incompatible!
+time_diff = current_time - self.last_press_time if self.last_press_time > 0 else 999
 ```
-**Problem**: First press calculates `time_diff = current_time - 0`, resulting in ~1757286762 seconds
-**Solution**: Initialize to `-999` or check for first press explicitly
+
+**Problem**: 
+- `last_press_time = -999` (negative)
+- Condition `self.last_press_time > 0` is FALSE
+- So `time_diff = 999` (the else value)
+- Double-click check `0 < time_diff < 2.0` FAILS (999 > 2.0)
+
+**Solution**: Fix the condition to handle negative initialization:
+```python
+# Option 1: Change condition
+time_diff = current_time - self.last_press_time if self.last_press_time >= 0 else 999
+
+# Option 2: Better logic
+if self.last_press_time < 0:  # First press
+    time_diff = 999
+else:
+    time_diff = current_time - self.last_press_time
+```
 
 ### 🐛 Issue 2: Double Pasting in Wake Word
 **Locations**: 
@@ -94,8 +171,137 @@ CONFIG = {
 - [ ] No duplicate pasting in any workflow
 - [ ] Both workflows have same transcription speed
 
-## Fix Implementation Plan
-1. Fix `last_press_time` initialization
-2. Add `skip_final_processing` flag to prevent double paste
-3. Verify `RealtimeSTTCommunicator` has required methods
-4. Test both workflows end-to-end
+## Current Status - RESOLVED ✅
+
+### Final Fixes Applied (All Issues Resolved)
+
+#### 1. Double Command Recording Fixed
+**Solution**: Fixed key press logic ordering and initialization
+- Changed `last_press_time` initialization to 0 (from -999)
+- Fixed time_diff calculation: `time_diff = current_time - self.last_press_time if self.last_press_time > 0 else 999`
+- Reordered key press logic to check double-click BEFORE wake word stop
+- Added explicit `post_speech_silence_duration: None` to keyboard_settings
+- Replaced infinite loop with event-based waiting in manual mode
+
+#### 2. Double Pasting Fixed  
+**Solution**: Added proper check after `recorder.text()` returns
+- Check `manual_stop_requested` flag after `recorder.text()` completes
+- Discard duplicate text if manual stop occurred during transcription
+- Prevents `_process_final_text()` from pasting again
+
+#### 3. Key Press Logic Fixed
+**Solution**: Proper priority ordering in `on_key_press()`:
+1. If manual recording active → stop it
+2. If double-click detected (time_diff < 2.0) → start manual recording
+3. If wake word recording → stop wake word
+4. Otherwise → single press, wait for next action
+
+### Known Limitation
+**Wake word manual stop**: Due to `recorder.text()` being a blocking call in RealtimeSTT, pressing Right Command during wake word recording will paste the text correctly but the recorder might briefly continue detecting voice. This is a limitation of the RealtimeSTT library's blocking API that would require using callbacks for full interruption.
+
+## Key Implementation Details
+
+### Main Function Flow (`keyboard_service.py:220-292`)
+1. Creates `RecordingEventManager` for inter-service communication
+2. Creates `RealtimeSTTCommunicator` via `create_backend()` 
+3. Creates `DoubleCommandKeyListener` with communicator and event manager
+4. Starts wake word listener in parallel thread (if configured)
+5. Starts keyboard listener
+
+### Double Command Recording (`RealtimeSTTCommunicator`)
+- `start_recording()` (line 76): Creates background thread for recording
+- `stop_recording()` (line 122): Aborts recording and gets transcription
+- Uses `self.transcription_service.transcribe()` which blocks until complete
+- Background thread handles the blocking call
+
+### Wake Word Flow
+1. `WakeWordRealtimeSTTWrapper` runs in separate thread
+2. Listens for "Jarvis" continuously
+3. On detection, starts recording
+4. On Right Cmd press, emits `MANUAL_STOP_REQUESTED` event
+5. `_on_manual_stop_requested()` handles stop and paste
+
+## Debug Strategy
+1. Add logging to `RealtimeSTTCommunicator.start_recording()` to see if thread starts
+2. Check if `self.transcription_service.transcribe()` is being called
+3. Verify the recording thread stays alive
+4. For double paste: Need to prevent normal flow after manual stop
+
+## Code Flow Understanding
+
+### Double Command Workflow (BROKEN)
+```
+User: Double Right Cmd
+├─> DoubleCommandKeyListener.on_key_press()
+│   ├─> Checks time_diff < 2.0 seconds
+│   └─> Calls communicator.start_recording()
+│       ├─> Sets is_transcribing = True
+│       ├─> Creates background thread
+│       └─> Thread calls transcription_service.transcribe()
+│           └─> BLOCKS until speech complete or abort
+User: Single Right Cmd  
+├─> DoubleCommandKeyListener.on_key_press()
+│   ├─> Checks is_transcribing == True
+│   └─> Calls communicator.stop_recording()
+│       ├─> Calls abort_and_transcribe()
+│       └─> Pastes text
+```
+
+### Wake Word Workflow (WORKING but double pastes)
+```
+User: Says "Jarvis"
+├─> WakeWordService detects wake word
+│   └─> Starts recording with recorder.text()
+User: Right Cmd during recording
+├─> DoubleCommandKeyListener.on_key_press()
+│   ├─> Detects wake word is recording
+│   └─> Emits MANUAL_STOP_REQUESTED event
+│       └─> WakeWordService._on_manual_stop_requested()
+│           ├─> recorder.stop() with backdate
+│           ├─> recorder.text() gets transcription
+│           └─> clipboard.copy_and_paste_text() [FIRST PASTE]
+Meanwhile: Original recorder.text() continues
+├─> Returns transcribed text
+└─> _process_final_text() called
+    └─> clipboard.copy_and_paste_text() [SECOND PASTE - BUG]
+```
+
+## Critical Code Sections
+
+### RealtimeSTTCommunicator.start_recording() (Line 76-120)
+```python
+def start_recording(self):
+    if self.is_transcribing:
+        return
+    
+    self.is_transcribing = True  # Set flag
+    self.stop_requested = False
+    
+    def record_in_background():
+        try:
+            # This BLOCKS until complete
+            transcription = self.transcription_service.transcribe()
+            # Process and paste...
+        finally:
+            self.is_transcribing = False  # Clear flag
+    
+    self.recording_thread = create_daemon_thread(...)
+    self.recording_thread.start()
+```
+
+### Key Issues in Code
+1. **Double Command**: `transcription_service.transcribe()` might not be working without wake words
+2. **Double Paste**: After manual stop, the original `recorder.text()` still returns and gets processed
+3. **Threading**: Background thread might be dying immediately
+
+## Solution Approaches
+
+### For Double Command Not Working
+- Check if RealtimeSTTWrapper needs wake words even when None passed
+- Verify transcribe() works without wake word configuration
+- Add debug logging to see if thread starts and stays alive
+
+### For Double Pasting
+- After manual stop, need to abort the original recorder.text() call
+- OR set a flag that prevents _process_final_text() from pasting
+- The `text_already_processed` flag exists but isn't being checked properly

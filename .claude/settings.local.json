@@ -33,7 +33,8 @@
       "WebFetch(domain:github.com)",
       "mcp__perplexity__search",
       "WebSearch",
-      "mcp__perplexity__deep_research"
+      "mcp__perplexity__deep_research",
+      "mcp__sequential-thinking__sequentialthinking"
     ],
     "deny": []
   }
