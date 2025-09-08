@@ -6,11 +6,8 @@ Listens for double Right Command press to trigger transcription.
 
 # Configuration - Change backend here (no code deletion)
 CONFIG = {
-    "transcription_backend": "realtimestt",  # Only RealtimeSTT supported
     "model_name": "medium",
     "language": "en",
-
-
     # Double command key specific settings (manual control)
     "keyboard_settings": {
         "enable_realtime": False,
@@ -37,8 +34,8 @@ from ..utils.recording_events import RecordingEvent
 class RealtimeSTTCommunicator:
     """RealtimeSTT backend for keyboard-triggered transcription"""
 
-    def __init__(self, model="base", language="en", settings=None):
-        settings = settings or {}
+    def __init__(self, model, language, settings):
+
         try:
             from ..backends.realtimestt_backend import RealtimeSTTWrapper
             from ..utils.clipboard import TranscriptionHandler, ClipboardManager
@@ -48,7 +45,7 @@ class RealtimeSTTCommunicator:
                 model=model,
                 language=language,
                 wake_words=None,
-                config=settings.get('keyboard_settings', {})  # Pass keyboard-specific config
+                config=settings  # Pass keyboard-specific config
             )
 
             # Use centralized transcription handler
@@ -60,7 +57,7 @@ class RealtimeSTTCommunicator:
             raise
 
         self.is_transcribing = False
-        self.settings = settings or {}
+        self.settings = settings
         self.recording_thread = None
         self.stop_requested = False
 
@@ -141,12 +138,10 @@ class RealtimeSTTCommunicator:
 
 def create_backend(config):
     """Create RealtimeSTT backend with keyboard settings"""
-    keyboard_settings = config.get("keyboard_settings", {})
-
     return RealtimeSTTCommunicator(
-        model=config.get("model_name", "base"),
-        language=config.get("language", "en"),
-        settings=keyboard_settings
+        model=config["model_name"],
+        language=config["language"],
+        settings=config["keyboard_settings"]
     )
 
 # DockerCommunicator removed - using RealtimeSTT only
