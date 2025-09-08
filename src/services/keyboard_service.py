@@ -14,12 +14,12 @@ CONFIG = {
     # Double command key specific settings (manual control)
     "keyboard_settings": {
         "enable_realtime": False,
-        "pre_buffer_duration": 1.5,
+        "pre_buffer_duration": 2.0,
         "vad_sensitivity": 0.3,
         "post_speech_silence_duration": None,  # Explicit None for manual control
         "webrtc_sensitivity": 2,
         "min_length_of_recording": 0.3,
-        "min_gap_between_recordings": 0.5
+        "min_gap_between_recordings": 0.0
     }
 }
 
