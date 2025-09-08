@@ -1,6 +1,6 @@
 """
 Shared event system for coordinating recording state between services.
-Allows wake word service and keyboard service to communicate recording events.
+Allows keyboard service to track recording events.
 """
 
 import threading
@@ -10,8 +10,6 @@ from enum import Enum
 
 class RecordingEvent(Enum):
     """Types of recording events that can be emitted"""
-    WAKE_WORD_RECORDING_STARTED = "wake_word_recording_started"
-    WAKE_WORD_RECORDING_STOPPED = "wake_word_recording_stopped" 
     MANUAL_STOP_REQUESTED = "manual_stop_requested"
     MANUAL_RECORDING_STARTED = "manual_recording_started"
     MANUAL_RECORDING_STOPPED = "manual_recording_stopped"
@@ -30,7 +28,6 @@ class RecordingEventManager:
     def __init__(self):
         self._subscribers: Dict[RecordingEvent, List[Callable]] = {}
         self._lock = threading.Lock()
-        self._wake_word_recording = False
         self._manual_recording = False
     
     def subscribe(self, event: RecordingEvent, callback: Callable) -> None:
@@ -44,11 +41,7 @@ class RecordingEventManager:
         """Emit a recording event to all subscribers"""
         with self._lock:
             # Update internal state
-            if event == RecordingEvent.WAKE_WORD_RECORDING_STARTED:
-                self._wake_word_recording = True
-            elif event == RecordingEvent.WAKE_WORD_RECORDING_STOPPED:
-                self._wake_word_recording = False
-            elif event == RecordingEvent.MANUAL_RECORDING_STARTED:
+            if event == RecordingEvent.MANUAL_RECORDING_STARTED:
                 self._manual_recording = True
             elif event == RecordingEvent.MANUAL_RECORDING_STOPPED:
                 self._manual_recording = False
@@ -61,10 +54,6 @@ class RecordingEventManager:
                     except Exception as e:
                         print(f"Error in event callback for {event}: {e}")
     
-    def is_wake_word_recording(self) -> bool:
-        """Check if wake word recording is currently active"""
-        with self._lock:
-            return self._wake_word_recording
     
     def is_manual_recording(self) -> bool:
         """Check if manual recording is currently active"""
@@ -74,4 +63,4 @@ class RecordingEventManager:
     def is_any_recording(self) -> bool:
         """Check if any recording is currently active"""
         with self._lock:
-            return self._wake_word_recording or self._manual_recording
+            return self._manual_recording

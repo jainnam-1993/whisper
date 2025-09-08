@@ -7,23 +7,9 @@ Listens for double Right Command press to trigger transcription.
 # Configuration - Change backend here (no code deletion)
 CONFIG = {
     "transcription_backend": "realtimestt",  # Only RealtimeSTT supported
-    "model_name": "base",
+    "model_name": "medium",
     "language": "en",
     
-    # Wake word specific settings (automatic control)
-    "wake_word_settings": {
-        "enable_realtime": False,
-        "pre_buffer_duration": 1.5,
-        "vad_sensitivity": 0.3,
-        "post_speech_silence_duration": 1.5,        # Auto-stop after 1.5s silence
-        "webrtc_sensitivity": 2,
-        "min_length_of_recording": 0.3,
-        "min_gap_between_recordings": 0.5,
-        "wake_words": "jarvis",
-        "wake_words_sensitivity": 1.0,
-        "wake_word_timeout": 3,
-        "wake_word_activation_delay": 0.0
-    },
     
     # Double command key specific settings (manual control)
     "keyboard_settings": {
@@ -34,7 +20,6 @@ CONFIG = {
         "webrtc_sensitivity": 2,
         "min_length_of_recording": 0.3,
         "min_gap_between_recordings": 0.5
-        # No wake word settings for keyboard trigger
     }
 }
 
@@ -57,18 +42,24 @@ class RealtimeSTTCommunicator:
         settings = settings or {}
         try:
             from ..backends.realtimestt_backend import RealtimeSTTWrapper
-            # For keyboard trigger: use direct recording (no wake words)
+            from ..utils.clipboard import TranscriptionHandler, ClipboardManager
+            
+            # For keyboard trigger: use direct recording
             self.transcription_service = RealtimeSTTWrapper(
                 model=model,
                 language=language,
-                wake_words=None,  # Force no wake words for keyboard trigger
+                wake_words=None,
                 config=settings  # Pass entire config dict
             )
+            
+            # Use centralized transcription handler
+            clipboard = ClipboardManager()
+            self.transcription_handler = TranscriptionHandler(clipboard)
+            
         except ImportError as e:
             print(f"Error: RealtimeSTT not available: {e}")
             raise
 
-        self.clipboard = ClipboardManager()  # Use shared clipboard manager
         self.is_transcribing = False
         self.settings = settings or {}
         self.recording_thread = None
@@ -95,19 +86,16 @@ class RealtimeSTTCommunicator:
                 # The stop_recording() method can interrupt it with abort()
                 transcription = self.transcription_service.transcribe()
 
-                # Process transcription whether stopped early or completed naturally
+                # Process transcription through single handler - NO race conditions
                 if self.stop_requested:
                     # If stop was requested, transcription was already handled in stop_recording()
                     print("⏭️ Transcription already handled by stop_recording()")
                 elif transcription and transcription.strip():
-                    print(f"Transcription completed: {transcription}")
-
-                    # Use unified clipboard workflow
-                    if self.clipboard.copy_and_paste_text(transcription):
-                        print("Text successfully copied and pasted")
-                    else:
-                        print("Failed to copy/paste - please paste manually (Cmd+V)")
-                elif not transcription or not transcription.strip():
+                    # Route through single transcription handler
+                    self.transcription_handler.handle_transcription(
+                        transcription, "manual_background"
+                    )
+                else:
                     print("No speech detected")
 
             except Exception as e:
@@ -135,14 +123,11 @@ class RealtimeSTTCommunicator:
             # Force immediate transcription of whatever was captured
             transcription = self.transcription_service.abort_and_transcribe()
             
-            # Process transcription immediately
+            # Route through single transcription handler
             if transcription and transcription.strip():
-                print(f"Transcription from manual stop: {transcription}")
-                # Paste here since we're aborting the background thread
-                if self.clipboard.copy_and_paste_text(transcription):
-                    print("Text successfully copied and pasted")
-                else:
-                    print("Failed to copy/paste - please paste manually (Cmd+V)")
+                self.transcription_handler.handle_transcription(
+                    transcription, "manual_stop"
+                )
             else:
                 print("No speech detected yet")
 
@@ -187,7 +172,7 @@ class DoubleCommandKeyListener:
 
                 print(f"🔍 DEBUG: Time since last press: {time_diff:.3f}s, is_transcribing: {self.communicator.is_transcribing}")
 
-                # Priority 1: Check for double-click FIRST (before wake word check)
+                # Priority 1: Check for double-click to start recording
                 if 0 < time_diff < 2.0 and not self.communicator.is_transcribing:
                     print("✅ Double command detected - starting manual recording!")
                     if self.event_manager:
@@ -201,14 +186,9 @@ class DoubleCommandKeyListener:
                         self.event_manager.emit(RecordingEvent.MANUAL_RECORDING_STOPPED)
                     self.communicator.stop_recording()
                     
-                # Priority 3: If wake word is recording, stop it (only if not double-click)
-                elif self.event_manager and self.event_manager.is_wake_word_recording():
-                    print("🎤 Wake word recording active - single press will stop recording")
-                    self.event_manager.emit(RecordingEvent.MANUAL_STOP_REQUESTED)
-                    
-                # Priority 4: Single press with no active recording - just update timestamp
+                # Priority 3: Single press with no active recording - just update timestamp  
                 else:
-                    print("⏸️ Single press - waiting for double-click or wake word...")
+                    print("⏸️ Single press - waiting for double-click...")
 
                 self.last_press_time = current_time
         except Exception as e:
@@ -241,44 +221,13 @@ def main():
             communicator = create_backend(CONFIG)
             key_listener = DoubleCommandKeyListener(communicator, event_manager)
 
-            # Start wake word listener in parallel thread if configured
-            wake_word_thread = None
-            if CONFIG.get("wake_word_settings", {}).get("wake_words"):
-                print("🎤 Starting parallel wake word listener for 'Jarvis'...")
-                def run_wake_word_listener():
-                    try:
-                        from .wake_word_service import WakeWordRealtimeSTTWrapper
+            # DISABLED: Wake word listener (keeping only double command for simplicity)
+            # wake_word_thread = None
+            # if CONFIG.get("wake_word_settings", {}).get("wake_words"):
+            #     print("🎤 Starting parallel wake word listener for 'Jarvis'...")
+            #     # (wake word code commented out for simplicity)
+            print("🎯 SIMPLIFIED: Only double Right Command recording active")
 
-                        # Get wake word settings
-                        wake_settings = CONFIG["wake_word_settings"]
-
-                        # Create wake word wrapper with event manager
-                        wrapper = WakeWordRealtimeSTTWrapper(
-                            model=CONFIG.get("model_name", "base"),
-                            language=CONFIG.get("language", "en"),
-                            wake_word="jarvis",
-                            sensitivity=wake_settings["wake_words_sensitivity"],
-                            timeout=wake_settings["wake_word_timeout"],
-                            post_speech_silence_duration=wake_settings["post_speech_silence_duration"],
-                            silero_sensitivity=wake_settings["vad_sensitivity"],
-                            webrtc_sensitivity=wake_settings["webrtc_sensitivity"],
-                            min_length_of_recording=wake_settings["min_length_of_recording"],
-                            min_gap_between_recordings=wake_settings["min_gap_between_recordings"],
-                            event_manager=event_manager
-                        )
-
-                        # Start continuous listening with GUI support
-                        wrapper.continuous_listen()
-                    except Exception as e:
-                        print(f"Wake word listener error: {e}")
-
-                wake_word_thread = create_daemon_thread(
-                    target=run_wake_word_listener,
-                    name="WakeWord-Listener"
-                )
-                wake_word_thread.start()
-                print("✅ Wake word listener started in background with GUI support")
-                print("🎯 NEW: Say 'jarvis' then hit Right Command to stop recording!")
 
             # Start the keyboard listener
             listener = keyboard.Listener(

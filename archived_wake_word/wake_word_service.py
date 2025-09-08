@@ -53,7 +53,10 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
         self.webrtc_sensitivity = webrtc_sensitivity
         self.min_length_of_recording = min_length_of_recording
         self.min_gap_between_recordings = min_gap_between_recordings
+        # Use centralized transcription handler
+        from ..utils.clipboard import TranscriptionHandler
         self.clipboard = ClipboardManager()
+        self.transcription_handler = TranscriptionHandler(self.clipboard)
         
 
         
@@ -355,46 +358,47 @@ class WakeWordRealtimeSTTWrapper(TranscriptionService):
 
     
     def _on_manual_stop_requested(self):
-        """Called when manual stop is requested via keyboard"""
-        print("⚡ Manual stop requested - stopping recorder...")
+        """Called when manual stop is requested via keyboard - get text and paste immediately"""
+        print("⚡ Manual stop requested - getting transcription and pasting...")
         
         try:
             if hasattr(self, 'recorder') and self.recorder:
-                # Just stop the recorder, don't get text here
-                # Let the main transcribe() method handle getting and pasting text
+                # Stop the recorder first
                 trim_duration = self.min_length_of_recording
                 self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)
-                print("⏹️ Recorder stopped by manual request")
+                
+                # Get the transcription immediately and paste it
+                text = self.recorder.text()
+                if text and text.strip():
+                    # Paste immediately via TranscriptionHandler
+                    success = self.transcription_handler.handle_transcription(
+                        text.strip(), "wake_word_manual"
+                    )
+                    if success:
+                        print("✅ Manual stop transcription pasted successfully")
+                        self.text_already_processed = True  # Prevent main transcribe from pasting again
+                    else:
+                        print("❌ Manual stop paste failed")
+                else:
+                    print("ℹ️ No speech detected for manual stop")
+                    
         except Exception as e:
-            print(f"❌ Error stopping recorder: {e}")
+            print(f"❌ Error in manual stop: {e}")
         finally:
-            # Signal that manual stop was requested
+            # Always set flags to prevent main transcribe from processing
             self.manual_stop_requested = True
             self.stop_event.set()
 
     
     def _process_final_text(self, text):
-        """Unified text processing for both normal and manual completion"""
-        # Skip if already processed by manual stop handler
-        if hasattr(self, 'text_already_processed') and self.text_already_processed:
-            print("⏭️ Text already processed by manual stop - skipping duplicate")
-            return text
-            
+        """Unified text processing using TranscriptionHandler - eliminates duplicates"""
         if text and text.strip():
-
-            
-            print(f"✅ Final transcription: '{text.strip()}'")
-            
-            # Use unified clipboard workflow (same as manual trigger mode)
-            if self.clipboard.copy_and_paste_text(text.strip()):
-                print("✅ Text successfully copied and pasted")
-            else:
-                print("❌ Failed to copy/paste - please paste manually (Cmd+V)")
-                
-            return text
+            # Route through single transcription handler - no more duplicates!
+            success = self.transcription_handler.handle_transcription(
+                text.strip(), "wake_word_natural"
+            )
+            return text if success else ""
         else:
-            # Hide GUI if no speech detected
-
             print("ℹ️ No speech detected")
             return ""
     
