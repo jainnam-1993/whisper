@@ -1,0 +1,12 @@
+{
+  "developer_name": "Naman",
+  "api_mode": false,
+  "trigger_phrases": ["make it so", "run that", "go ahead", "yert", "yes", "proceed", "implement"],
+  "blocked_tools": ["Edit", "Write", "MultiEdit", "NotebookEdit"],
+  "task_detection": {
+    "enabled": true
+  },
+  "branch_enforcement": {
+    "enabled": true
+  }
+}

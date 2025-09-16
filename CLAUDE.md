@@ -305,3 +305,6 @@ def start_recording(self):
 - After manual stop, need to abort the original recorder.text() call
 - OR set a flag that prevents _process_final_text() from pasting
 - The `text_already_processed` flag exists but isn't being checked properly
+## Sessions System Behaviors
+
+@CLAUDE.sessions.md

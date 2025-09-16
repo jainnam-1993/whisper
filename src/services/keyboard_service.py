@@ -6,7 +6,7 @@ Listens for double Right Command press to trigger transcription.
 
 # Configuration - Change backend here (no code deletion)
 CONFIG = {
-    "model_name": "medium",
+    "model_name": "small",
     "language": "en",
     # Double command key specific settings (manual control)
     "keyboard_settings": {
@@ -26,10 +26,6 @@ import sys
 from pynput import keyboard
 from ..utils.process import SingleInstanceLock, create_daemon_thread
 from ..utils.recording_events import RecordingEvent
-
-# SingleInstanceLock moved to src/utils/process.py
-
-# ClipboardManager moved to src/utils/clipboard.py
 
 class RealtimeSTTCommunicator:
     """RealtimeSTT backend for keyboard-triggered transcription"""
