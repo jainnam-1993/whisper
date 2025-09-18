@@ -174,17 +174,20 @@ class RecordingPopup(QWidget):
 
         # Draw frosted glass background
         self._draw_frosted_background(painter)
-        
+
         # Draw glowing neon border around entire popup
         self._draw_neon_border(painter)
-        
+
         # Content area (adjusted for new rectangular dimensions)
         content_rect = QRectF(25, 20, self.width() - 50, self.height() - 40)
 
         # Draw waveform (positioned higher without title)
-        waveform_rect = QRectF(content_rect.x() + 20, content_rect.y() + 40, 
+        waveform_rect = QRectF(content_rect.x() + 20, content_rect.y() + 40,
                               content_rect.width() - 40, 100)
         self._draw_waveform(painter, waveform_rect)
+
+        # Draw particle dots around waveform
+        self._draw_particle_dots(painter, waveform_rect)
 
         # Draw timer with rounded background
         if self.start_time:
@@ -195,13 +198,13 @@ class RecordingPopup(QWidget):
 
         # Timer background with rounded corners (centered for new layout)
         timer_bg_rect = QRectF(content_rect.center().x() - 100, content_rect.y() + 160, 200, 45)
-        timer_bg_color = QColor(0, 255, 255, 40)  # Subtle cyan background
+        timer_bg_color = QColor(51, 193, 255, 40)  # Subtle cyan background
         painter.setBrush(QBrush(timer_bg_color))
-        painter.setPen(QPen(QColor(0, 255, 255, 100), 1))
-        painter.drawRoundedRect(timer_bg_rect, 15, 15)
+        painter.setPen(QPen(QColor(51, 193, 255, 100), 1))
+        painter.drawRoundedRect(timer_bg_rect, 22, 22)  # Pill shape
 
         # Timer text
-        painter.setPen(QPen(QColor(0, 255, 255)))  # Cyan color like reference
+        painter.setPen(QPen(QColor(51, 193, 255)))  # Cyan color #33C1FF
         timer_font = QFont("SF Mono", 24, QFont.Weight.Bold)
         painter.setFont(timer_font)
         painter.drawText(timer_bg_rect, Qt.AlignmentFlag.AlignCenter, time_str)
@@ -218,192 +221,205 @@ class RecordingPopup(QWidget):
         painter.fillRect(self.rect(), QBrush(background_color))
 
     def _draw_frosted_background(self, painter):
-        """Draw frosted glass background with blur effect for visibility"""
-        # Draw dark blur background for better contrast
+        """Draw glassmorphism background with semi-transparent blur effect"""
+        # Draw glassmorphism background
         bg_rect = QRectF(10, 10, self.width() - 20, self.height() - 20)
-        
-        # Create blur effect with dark background
-        # First layer - dark blur backdrop
-        blur_color = QColor(0, 0, 0, 80)  # Dark background with opacity
-        painter.setBrush(QBrush(blur_color))
+
+        # Glassmorphism effect - semi-transparent dark with subtle white overlay
+        # Base layer - semi-transparent dark
+        glass_color = QColor(60, 65, 72, 65)  # Semi-transparent dark gray
+        painter.setBrush(QBrush(glass_color))
         painter.setPen(QPen(Qt.PenStyle.NoPen))
-        painter.drawRoundedRect(bg_rect, 20, 20)
-        
-        # Second layer - frosted glass effect
-        frosted_color = QColor(255, 255, 255, 15)  # Very subtle white frost
-        painter.setBrush(QBrush(frosted_color))
+        painter.drawRoundedRect(bg_rect, 30, 30)  # Larger corner radius
+
+        # Subtle white overlay for glass effect
+        overlay_color = QColor(255, 255, 255, 8)  # Very subtle white
+        painter.setBrush(QBrush(overlay_color))
         painter.setPen(QPen(Qt.PenStyle.NoPen))
-        painter.drawRoundedRect(bg_rect, 20, 20)
+        painter.drawRoundedRect(bg_rect, 30, 30)
 
     def _draw_neon_border(self, painter):
-        """Draw glowing neon border with shiny gradient effect"""
-        # Continuous pulsing animation
-        pulse_phase = self.phase * 2.0  # Faster pulsing
-        pulse_intensity = 0.7 + (math.sin(pulse_phase) * 0.3)  # Pulse between 0.7 and 1.0
-        
+        """Draw clean glowing cyan border matching reference design"""
         # Popup rectangle with rounded corners
-        popup_rect = QRectF(5, 5, self.width() - 10, self.height() - 10)
-        
-        # Draw multiple border layers for shiny gradient glow effect
-        for i in range(6):  # Fewer layers for thinner border
-            # Calculate opacity based on layer and pulse
-            base_alpha = 220 - (i * 35)
-            alpha = int(base_alpha * pulse_intensity)
-            
-            # Thinner border widths
-            width = 2.0 + (5 - i) * 0.4  # Much thinner
-            
-            # Shinier gradient colors - cyan to pink/magenta
-            if i < 2:
-                # Inner layers - bright electric cyan
-                color = QColor(0, 255, 255, alpha)
-            elif i < 3:
-                # Middle layer - cyan to pink transition
-                color = QColor(100, 255, 255, alpha)
-            elif i < 4:
-                # Pink/magenta layer
-                color = QColor(255, 100, 255, int(alpha * 0.9))
-            else:
-                # Outer layers - purple/pink glow
-                color = QColor(255, 150, 255, int(alpha * 0.5))
-                
-            painter.setPen(QPen(color, width))
-            painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-            
-            # Adjust rect for each layer
-            offset = i * 0.4  # Smaller offset for thinner border
-            painter.drawRoundedRect(
-                popup_rect.adjusted(offset, offset, -offset, -offset), 
-                20, 20
-            )
+        popup_rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
+
+        # Single thin cyan border with glow effect
+        # Main border
+        border_color = QColor(51, 193, 255, 255)  # #33C1FF - exact cyan from reference
+        painter.setPen(QPen(border_color, 1.5))  # Thin 1.5px border
+        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        painter.drawRoundedRect(popup_rect, 30, 30)
+
+        # Outer glow effect (single subtle layer)
+        glow_color = QColor(51, 193, 255, 60)  # Same cyan with lower opacity
+        painter.setPen(QPen(glow_color, 3))  # Slightly thicker for glow
+        painter.drawRoundedRect(popup_rect.adjusted(-1, -1, 1, 1), 30, 30)
 
     def _draw_waveform(self, painter, waveform_rect=None):
-        """Draw animated waveform with dramatic music visualizer effect"""
+        """Draw symmetric waveform matching reference design"""
         # Use provided rect or default for backward compatibility
         if waveform_rect is None:
             waveform_rect = QRectF(75, 100, 450, 80)
-        
+
         center_y = waveform_rect.center().y()
 
         # Draw waveform bars with clean varied heights
         with self.level_lock:
             levels = self.audio_levels[:]
 
-        num_bars = 60  # More bars for finer detail
-        bar_width = waveform_rect.width() / num_bars
-        bar_spacing = bar_width * 0.4  # Much more spacing for narrower bars
-        
+        num_bars = 60  # Number of bars
+        total_width = waveform_rect.width()
+        bar_width = 3  # Fixed bar width in pixels
+        spacing = 2  # Fixed spacing between bars
+
+        # Calculate total space needed and center the bars
+        total_bars_width = (bar_width + spacing) * num_bars
+        start_x = waveform_rect.left() + (total_width - total_bars_width) / 2
+
         import random
-        
+
+        # Set pen and brush once for all bars
+        painter.setPen(Qt.PenStyle.NoPen)  # No outline
+        bar_brush = QBrush(QColor(51, 193, 255, 255))  # #33C1FF - cyan from reference
+        painter.setBrush(bar_brush)
+
         for i in range(num_bars):
-            x = waveform_rect.left() + (i * bar_width) + bar_spacing
-            
+            x = start_x + i * (bar_width + spacing)
+
             # Get interpolated audio level
             level_index = int((i / num_bars) * len(levels))
             level = levels[min(level_index, len(levels) - 1)]
-            
-            # MORE DRAMATIC height variations
-            # Different frequency bands with more extreme differences
-            if i < num_bars * 0.15:  # Sub-bass - very tall
+
+            # Create tapered structure from center to edges
+            distance_from_center = abs(i - num_bars / 2) / (num_bars / 2)
+
+            # Taper heights - tallest in center, shortest at edges
+            if distance_from_center < 0.2:  # Core - center 20%
                 base_height = 0.9
-                wave_freq = 0.1
-                amplitude_mult = 1.3
-            elif i < num_bars * 0.3:  # Bass - tall
-                base_height = 0.75
-                wave_freq = 0.15
-                amplitude_mult = 1.2
-            elif i < num_bars * 0.6:  # Mids - medium with variation
-                base_height = 0.5
-                wave_freq = 0.25
-                amplitude_mult = 1.0
-            elif i < num_bars * 0.8:  # High mids - shorter
-                base_height = 0.35
-                wave_freq = 0.35
-                amplitude_mult = 0.8
-            else:  # Highs - very short but active
-                base_height = 0.2
-                wave_freq = 0.5
-                amplitude_mult = 0.6
-            
-            # Much more dramatic wave pattern with faster movement
-            wave_pattern = math.sin(i * wave_freq + self.phase * 3.0) * 0.6 + 0.4
-            
-            # More chaotic randomness for dramatic jumps
-            random.seed(i * 1337 + int(self.phase * 0.5))
-            random_factor = random.random() * 0.7 + 0.3  # 0.3 to 1.0
-            
-            # Additional dramatic pulse wave
-            pulse_wave = math.sin(self.phase * 4.0 + i * 0.1) * 0.3
-            
-            # Calculate bar height with all factors
+            elif distance_from_center < 0.5:  # Body - middle sections
+                base_height = 0.7 - (distance_from_center - 0.2) * 2
+            elif distance_from_center < 0.8:  # Tails
+                base_height = 0.3 - (distance_from_center - 0.5) * 0.5
+            else:  # Far edges - dots
+                base_height = 0.05
+
+            # Smooth wave animation
+            wave_pattern = math.sin(i * 0.2 + self.phase * 2.0) * 0.2 + 0.8
+
+            # Subtle randomness for organic feel
+            random.seed(i * 1337 + int(self.phase * 0.3))
+            random_factor = random.random() * 0.2 + 0.8  # 0.8 to 1.0
+
+            # Calculate bar height
             min_height = 2
-            max_height = waveform_rect.height() * 0.95
-            
-            # Combine all factors for dramatic effect
-            height_factor = base_height * wave_pattern * random_factor * amplitude_mult
-            height_factor += pulse_wave  # Add pulse for more movement
-            
-            # Dramatic breathing effect
-            breath = 0.85 + (math.sin(self.phase * 2.5 + i * 0.05) * 0.15)
+            max_height = waveform_rect.height() * 0.45  # Half height for symmetry
+
+            # Combine factors
+            height_factor = base_height * wave_pattern * random_factor
+
+            # Gentle breathing effect
+            breath = 0.9 + (math.sin(self.phase * 2.0 + i * 0.05) * 0.1)
             height_factor *= breath
-            
+
             # Ensure within bounds
-            height_factor = max(0.05, min(1.0, height_factor))
-            
-            amplitude = min_height + (max_height - min_height) * height_factor
-            
-            # Add audio level influence (but keep animation even when silent)
-            amplitude = amplitude * (0.5 + level * 0.5)
-            
+            height_factor = max(0.02, min(1.0, height_factor))
+
+            half_amplitude = min_height + (max_height - min_height) * height_factor
+
+            # Add audio level influence
+            half_amplitude = half_amplitude * (0.6 + level * 0.4)
+
             # Ensure minimum visibility
-            amplitude = max(min_height, min(amplitude, max_height))
-            
-            # Draw narrower vertical bar
-            bar_rect = QRectF(
-                x, 
-                center_y - amplitude/2, 
-                bar_width * 0.3,  # Much narrower bars (30% of spacing)
-                amplitude
+            half_amplitude = max(min_height, min(half_amplitude, max_height))
+
+            # Draw symmetric bars (top and bottom from center)
+            # Top bar
+            top_rect = QRectF(
+                x,
+                center_y - half_amplitude,
+                bar_width,
+                half_amplitude
             )
-            
-            # Solid cyan color for clean look
-            painter.fillRect(bar_rect, QBrush(QColor(0, 255, 255, 200)))
+            painter.fillRect(top_rect, bar_brush)
+
+            # Bottom bar (mirror)
+            bottom_rect = QRectF(
+                x,
+                center_y,
+                bar_width,
+                half_amplitude
+            )
+            painter.fillRect(bottom_rect, bar_brush)
+
+    def _draw_particle_dots(self, painter, waveform_rect):
+        """Draw floating particle dots around waveform for dynamic effect"""
+        import random
+
+        # Set random seed based on phase for animated particles
+        random.seed(int(self.phase * 10))
+
+        # Draw 30-40 particle dots
+        num_particles = 35
+
+        for i in range(num_particles):
+            # Random position around waveform
+            # Concentrate particles near the center
+            x_offset = (random.random() - 0.5) * waveform_rect.width() * 1.2
+            y_offset = (random.random() - 0.5) * waveform_rect.height() * 1.5
+
+            # Position relative to waveform center
+            x = waveform_rect.center().x() + x_offset
+            y = waveform_rect.center().y() + y_offset
+
+            # Vary particle size and opacity
+            size = random.random() * 2 + 1  # 1-3 pixels
+            base_alpha = random.randint(20, 80)
+
+            # Pulse effect for particles
+            pulse = math.sin(self.phase * 3 + i) * 0.3 + 0.7
+            alpha = int(base_alpha * pulse)
+
+            # Draw particle dot
+            particle_color = QColor(51, 193, 255, alpha)  # Cyan with varying opacity
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(particle_color))
+            painter.drawEllipse(QPointF(x, y), size, size)
 
     def _draw_microphone_icon(self, painter, content_rect):
         """Draw microphone icon at bottom center of popup"""
         # Icon position at bottom center
         icon_x = content_rect.center().x()
         icon_y = content_rect.bottom() - 20
-        
+
         # Draw microphone shape with glow effect
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Outer glow
         for i in range(3):
             alpha = 60 - i * 20
             size = 16 + i * 2
-            painter.setPen(QPen(QColor(0, 255, 255, alpha), 2))
+            painter.setPen(QPen(QColor(51, 193, 255, alpha), 2))  # Cyan #33C1FF
             painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-            
+
             # Microphone body (rounded rectangle)
             mic_rect = QRectF(icon_x - size/2, icon_y - size, size, size * 1.5)
             painter.drawRoundedRect(mic_rect, size/2, size/2)
-        
+
         # Main microphone icon
-        painter.setPen(QPen(QColor(0, 255, 255, 200), 2))
-        painter.setBrush(QBrush(QColor(0, 255, 255, 100)))
-        
+        painter.setPen(QPen(QColor(51, 193, 255, 200), 2))  # Cyan
+        painter.setBrush(QBrush(QColor(51, 193, 255, 100)))
+
         # Microphone body
         mic_rect = QRectF(icon_x - 7, icon_y - 14, 14, 20)
         painter.drawRoundedRect(mic_rect, 7, 7)
-        
+
         # Microphone stand
-        painter.setPen(QPen(QColor(0, 255, 255, 200), 2))
+        painter.setPen(QPen(QColor(51, 193, 255, 200), 2))
         painter.drawLine(QPointF(icon_x, icon_y + 6), QPointF(icon_x, icon_y + 12))
-        
+
         # Microphone base
         painter.drawLine(QPointF(icon_x - 8, icon_y + 12), QPointF(icon_x + 8, icon_y + 12))
-        
+
         # Microphone arc (sound capture area)
         painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
         arc_rect = QRectF(icon_x - 12, icon_y - 10, 24, 24)

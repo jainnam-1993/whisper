@@ -76,6 +76,24 @@ whisper/
 - **RecordingEventManager** (`src/utils/recording_events.py`): Event bus for inter-service communication
 - **RecordingEvent** enum: Event types (MANUAL_STOP_REQUESTED, etc.)
 
+#### Recording Popup GUI (`src/gui/recording_popup.py`)
+- **RecordingPopup**: Always-on-top popup window with real-time waveform visualization
+- **RecordingPopupManager**: Manages popup lifecycle and audio monitoring integration
+- **Features**:
+  - Dynamic waveform that reacts to voice input (bars change with audio levels)
+  - Stop/Cancel buttons with callback support
+  - Real-time audio level monitoring via AudioLevelMonitor
+  - Auto-positioning in center of screen
+  - Integrated with double command workflow
+
+#### Audio Monitoring (`src/utils/audio_monitor.py`)
+- **AudioLevelMonitor**: Real-time microphone level detection using PyAudio
+- **MockAudioMonitor**: Fallback with simulated audio levels for development
+- **Features**:
+  - RMS audio level calculation with smoothing
+  - 50 updates per second for smooth visualization
+  - Automatic fallback when PyAudio unavailable
+
 ## Current Issues & Root Causes
 
 ### 🐛 Issue 1: Double Command Not Working

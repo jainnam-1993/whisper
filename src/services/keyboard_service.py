@@ -6,16 +6,16 @@ Listens for double Right Command press to trigger transcription.
 
 # Configuration - Change backend here (no code deletion)
 CONFIG = {
-    "model_name": "small",
+    "model_name": "medium",
     "language": "en",
     # Double command key specific settings (manual control)
     "keyboard_settings": {
         "enable_realtime": False,
-        "pre_buffer_duration": 2.0,
+        "pre_buffer_duration": 3.0,
         "vad_sensitivity": 0.3,
         "post_speech_silence_duration": None,  # Explicit None for manual control
         "webrtc_sensitivity": 2,
-        "min_length_of_recording": 0.3,
+        "min_length_of_recording": 0.0,
         "min_gap_between_recordings": 0.0
     }
 }
@@ -58,7 +58,7 @@ class RealtimeSTTCommunicator:
         self.stop_requested = False
 
     def start_recording(self):
-        """Start recording in background thread"""
+        """Start recording in background thread with popup"""
         if self.is_transcribing:
             return
 
@@ -67,6 +67,13 @@ class RealtimeSTTCommunicator:
 
         print("🎙️ Starting direct RealtimeSTT recording...")
         print("🔍 Press Right Command once to stop recording")
+
+        # Show recording popup
+        try:
+            from ..gui.recording_popup_process import show_recording_popup
+            show_recording_popup()
+        except Exception as e:
+            print(f"Warning: Could not show recording popup: {e}")
 
         # Store start time for compatibility with original pattern
         self.start_time = time.time()
@@ -95,6 +102,13 @@ class RealtimeSTTCommunicator:
                     print(f"RealtimeSTT recording error: {e}")
             finally:
                 self.is_transcribing = False
+
+                # Hide popup when recording ends
+                try:
+                    from ..gui.recording_popup_process import hide_recording_popup
+                    hide_recording_popup()
+                except Exception as e:
+                    print(f"Warning: Could not hide recording popup: {e}")
 
         # Start recording in background (like original subprocess.Popen)
         self.recording_thread = create_daemon_thread(
@@ -131,6 +145,13 @@ class RealtimeSTTCommunicator:
             print(f"Error in stop_recording: {e}")
         finally:
             self.is_transcribing = False
+
+            # Hide popup when recording stops
+            try:
+                from ..gui.recording_popup_process import hide_recording_popup
+                hide_recording_popup()
+            except Exception as e:
+                print(f"Warning: Could not hide recording popup: {e}")
 
 def create_backend(config):
     """Create RealtimeSTT backend with keyboard settings"""
