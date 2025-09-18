@@ -181,9 +181,19 @@ class RecordingPopup(QWidget):
         # Content area (adjusted for new rectangular dimensions)
         content_rect = QRectF(25, 20, self.width() - 50, self.height() - 40)
 
-        # Draw waveform (positioned higher without title)
-        waveform_rect = QRectF(content_rect.x() + 20, content_rect.y() + 40,
-                              content_rect.width() - 40, 100)
+        # Calculate scale factor for responsive layout
+        base_height = 280  # Reference height from _setup_window
+        scale_factor = self.height() / base_height
+
+        # Position waveform proportionally (30% from top of content area)
+        waveform_y_offset = content_rect.height() * 0.2  # 20% down from top
+        waveform_height = min(100 * scale_factor, content_rect.height() * 0.35)  # Max 35% of height
+        waveform_rect = QRectF(
+            content_rect.x() + 20,
+            content_rect.y() + waveform_y_offset,
+            content_rect.width() - 40,
+            waveform_height
+        )
         self._draw_waveform(painter, waveform_rect)
 
         # Draw particle dots around waveform
@@ -196,19 +206,37 @@ class RecordingPopup(QWidget):
         else:
             time_str = "00:00"  # Fixed default format
 
-        # Timer background with rounded corners (centered for new layout)
-        timer_bg_rect = QRectF(content_rect.center().x() - 100, content_rect.y() + 160, 200, 45)
-        timer_bg_color = QColor(51, 193, 255, 40)  # Subtle cyan background
+        # Position timer relative to waveform bottom with scaled gap
+        timer_gap = 20 * scale_factor  # Scale the gap between waveform and timer
+        timer_y = waveform_rect.bottom() + timer_gap
+
+        # Ensure timer doesn't go too low (leave space for microphone icon)
+        max_timer_y = content_rect.bottom() - (80 * scale_factor)  # Reserve space for mic
+        timer_y = min(timer_y, max_timer_y)
+
+        # Timer dimensions with scaling
+        timer_width = 120 * scale_factor
+        timer_height = 45 * scale_factor
+
+        # Timer background with rounded corners (centered horizontally)
+        timer_bg_rect = QRectF(
+            content_rect.center().x() - timer_width/2,
+            timer_y,
+            timer_width,
+            timer_height
+        )
+        timer_bg_color = QColor(51, 193, 255, 30)  # Subtle cyan background
         painter.setBrush(QBrush(timer_bg_color))
         painter.setPen(QPen(QColor(51, 193, 255, 100), 1))
-        painter.drawRoundedRect(timer_bg_rect, 22, 22)  # Pill shape
+        painter.drawRoundedRect(timer_bg_rect, timer_height/2, timer_height/2)  # Pill shape
 
-        # Timer text
+        # Timer text with scaled font
         painter.setPen(QPen(QColor(51, 193, 255)))  # Cyan color #33C1FF
-        timer_font = QFont("SF Mono", 24, QFont.Weight.Bold)
+        timer_font_size = int(20 * scale_factor)
+        timer_font = QFont("SF Mono", timer_font_size, QFont.Weight.Bold)
         painter.setFont(timer_font)
         painter.drawText(timer_bg_rect, Qt.AlignmentFlag.AlignCenter, time_str)
-        
+
         # Draw microphone icon at bottom center
         self._draw_microphone_icon(painter, content_rect)
 
@@ -221,39 +249,27 @@ class RecordingPopup(QWidget):
         painter.fillRect(self.rect(), QBrush(background_color))
 
     def _draw_frosted_background(self, painter):
-        """Draw glassmorphism background with semi-transparent blur effect"""
-        # Draw glassmorphism background
-        bg_rect = QRectF(10, 10, self.width() - 20, self.height() - 20)
-
-        # Glassmorphism effect - semi-transparent dark with subtle white overlay
-        # Base layer - semi-transparent dark
-        glass_color = QColor(60, 65, 72, 65)  # Semi-transparent dark gray
-        painter.setBrush(QBrush(glass_color))
-        painter.setPen(QPen(Qt.PenStyle.NoPen))
-        painter.drawRoundedRect(bg_rect, 30, 30)  # Larger corner radius
-
-        # Subtle white overlay for glass effect
-        overlay_color = QColor(255, 255, 255, 8)  # Very subtle white
-        painter.setBrush(QBrush(overlay_color))
-        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        """Draw a semi-transparent dark background for the frosted glass effect."""
+        bg_rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
+        background_color = QColor(10, 20, 35, 200)  # Dark blue, semi-transparent
+        painter.setBrush(QBrush(background_color))
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(bg_rect, 30, 30)
 
     def _draw_neon_border(self, painter):
-        """Draw clean glowing cyan border matching reference design"""
-        # Popup rectangle with rounded corners
+        """Draw a clean, glowing cyan border to match the reference design."""
         popup_rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
 
-        # Single thin cyan border with glow effect
-        # Main border
-        border_color = QColor(51, 193, 255, 255)  # #33C1FF - exact cyan from reference
-        painter.setPen(QPen(border_color, 1.5))  # Thin 1.5px border
-        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        # Outer glow effect (subtle)
+        glow_color = QColor(51, 193, 255, 80)
+        painter.setPen(QPen(glow_color, 4))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(popup_rect, 30, 30)
 
-        # Outer glow effect (single subtle layer)
-        glow_color = QColor(51, 193, 255, 60)  # Same cyan with lower opacity
-        painter.setPen(QPen(glow_color, 3))  # Slightly thicker for glow
-        painter.drawRoundedRect(popup_rect.adjusted(-1, -1, 1, 1), 30, 30)
+        # Main border line
+        border_color = QColor(51, 193, 255, 255)  # #33C1FF - exact cyan
+        painter.setPen(QPen(border_color, 1.5))
+        painter.drawRoundedRect(popup_rect, 30, 30)
 
     def _draw_waveform(self, painter, waveform_rect=None):
         """Draw symmetric waveform matching reference design"""
