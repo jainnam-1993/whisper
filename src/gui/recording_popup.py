@@ -5,7 +5,7 @@ Uses PyQt6 for proper floating window without dock icon on macOS
 
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
-from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush
+from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush, QPainterPath
 import sys
 import time
 import random
@@ -52,7 +52,6 @@ class RecordingPopup(QWidget):
 
         # Recording state
         self.start_time = None
-        self.recording_file = "Project-Meeting-Notes.wav"
 
         # Waveform data and animation
         self.phase = 0.0  # Animation phase for pulsing
@@ -127,8 +126,8 @@ class RecordingPopup(QWidget):
     def _update_animation(self):
         """Update animation phase for pulsing effects and waveform movement"""
         if self.is_visible and not self.stop_animation:
-            self.phase += 0.05  # Continuous phase update for smooth animations
-            self.update()  # Trigger repaint  # Trigger repaint
+            self.phase += 0.02  # Slower animation for less pixelation
+            self.update()  # Trigger repaint
 
     def show(self):
         """Display the recording popup"""
@@ -141,7 +140,7 @@ class RecordingPopup(QWidget):
         self.phase = 0.0  # Reset phase for fresh animation
 
         # Start animations
-        self.animation_timer.start(50)  # 20 FPS for smooth pulsing
+        self.animation_timer.start(30)  # ~33 FPS for smoother rendering
         self.timer_update.start(10)  # Update timer every 10ms
 
         # Show window without stealing focus
@@ -168,7 +167,7 @@ class RecordingPopup(QWidget):
         print("⚫ Recording popup hidden")
 
     def paintEvent(self, event):
-        """Paint the popup with material design styling"""
+        """Paint the popup with responsive ratio-based positioning"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -178,21 +177,22 @@ class RecordingPopup(QWidget):
         # Draw glowing neon border around entire popup
         self._draw_neon_border(painter)
 
-        # Content area (adjusted for new rectangular dimensions)
-        content_rect = QRectF(25, 20, self.width() - 50, self.height() - 40)
+        # Content area using ratios (5% padding on all sides)
+        padding_ratio = 0.05
+        content_rect = QRectF(
+            self.width() * padding_ratio,
+            self.height() * padding_ratio,
+            self.width() * (1 - 2 * padding_ratio),
+            self.height() * (1 - 2 * padding_ratio)
+        )
 
-        # Calculate scale factor for responsive layout
-        base_height = 280  # Reference height from _setup_window
-        scale_factor = self.height() / base_height
-
-        # Position waveform proportionally (30% from top of content area)
-        waveform_y_offset = content_rect.height() * 0.2  # 20% down from top
-        waveform_height = min(100 * scale_factor, content_rect.height() * 0.35)  # Max 35% of height
+        # Waveform positioning using pure ratios
+        # Waveform at 25% from top, 35% height, 80% width
         waveform_rect = QRectF(
-            content_rect.x() + 20,
-            content_rect.y() + waveform_y_offset,
-            content_rect.width() - 40,
-            waveform_height
+            content_rect.x() + content_rect.width() * 0.1,  # 10% margin from sides
+            content_rect.y() + content_rect.height() * 0.25,  # 25% from top
+            content_rect.width() * 0.8,  # 80% of content width
+            content_rect.height() * 0.35  # 35% of content height
         )
         self._draw_waveform(painter, waveform_rect)
 
@@ -206,70 +206,76 @@ class RecordingPopup(QWidget):
         else:
             time_str = "00:00"  # Fixed default format
 
-        # Position timer relative to waveform bottom with scaled gap
-        timer_gap = 20 * scale_factor  # Scale the gap between waveform and timer
-        timer_y = waveform_rect.bottom() + timer_gap
+        # Timer positioning using ratios
+        # Timer at 70% from top, centered horizontally
+        timer_width = content_rect.width() * 0.25  # 25% of content width
+        timer_height = content_rect.height() * 0.15  # 15% of content height
+        timer_y = content_rect.y() + content_rect.height() * 0.70  # 70% from top
 
-        # Ensure timer doesn't go too low (leave space for microphone icon)
-        max_timer_y = content_rect.bottom() - (80 * scale_factor)  # Reserve space for mic
-        timer_y = min(timer_y, max_timer_y)
-
-        # Timer dimensions with scaling
-        timer_width = 120 * scale_factor
-        timer_height = 45 * scale_factor
-
-        # Timer background with rounded corners (centered horizontally)
-        timer_bg_rect = QRectF(
+        # No background for timer - clean minimal look
+        timer_rect = QRectF(
             content_rect.center().x() - timer_width/2,
-            timer_y,
+            timer_y + timer_height/4,  # Center text vertically
             timer_width,
-            timer_height
+            timer_height/2
         )
-        timer_bg_color = QColor(51, 193, 255, 30)  # Subtle cyan background
-        painter.setBrush(QBrush(timer_bg_color))
-        painter.setPen(QPen(QColor(51, 193, 255, 100), 1))
-        painter.drawRoundedRect(timer_bg_rect, timer_height/2, timer_height/2)  # Pill shape
-
-        # Timer text with scaled font
-        painter.setPen(QPen(QColor(51, 193, 255)))  # Cyan color #33C1FF
-        timer_font_size = int(20 * scale_factor)
-        timer_font = QFont("SF Mono", timer_font_size, QFont.Weight.Bold)
+        
+        # Timer text - bold and clean
+        painter.setPen(QPen(QColor(16, 24, 32)))  # Almost black for strong contrast  # Cyan color #33C1FF
+        timer_font_size = int(self.height() * 0.08)  # 8% of window height
+        timer_font = QFont("SF Pro Display", timer_font_size, QFont.Weight.DemiBold)  # Modern system font
+        timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2)  # Add letter spacing
         painter.setFont(timer_font)
-        painter.drawText(timer_bg_rect, Qt.AlignmentFlag.AlignCenter, time_str)
+        painter.drawText(timer_rect, Qt.AlignmentFlag.AlignCenter, time_str)
 
         # Draw microphone icon at bottom center
         self._draw_microphone_icon(painter, content_rect)
 
 
 
-    def _draw_material_surface(self, painter):
-        """Draw material design background with subtle transparency"""
-        # Subtle frosted glass effect background
-        background_color = QColor(250, 250, 250, 240)  # Very light gray with transparency
-        painter.fillRect(self.rect(), QBrush(background_color))
+
 
     def _draw_frosted_background(self, painter):
-        """Draw a semi-transparent dark background for the frosted glass effect."""
-        bg_rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
-        background_color = QColor(10, 20, 35, 200)  # Dark blue, semi-transparent
-        painter.setBrush(QBrush(background_color))
+        """Draw a modern, clean background with proper elevation"""
+        # Main container using ratios (4% padding)
+        padding_ratio = 0.04
+        bg_rect = QRectF(
+            self.width() * padding_ratio,
+            self.height() * padding_ratio, 
+            self.width() * (1 - 2 * padding_ratio),
+            self.height() * (1 - 2 * padding_ratio)
+        )
+        
+        # Modern gradient with color instead of white
+        gradient = QLinearGradient(0, 0, self.width(), self.height())
+        gradient.setColorAt(0.0, QColor(230, 240, 255))  # Light blue tint
+        gradient.setColorAt(0.5, QColor(245, 235, 255))  # Light purple center
+        gradient.setColorAt(1.0, QColor(255, 230, 245))  # Light pink bottom
+        
+        # Professional shadow with proper elevation using ratios
+        for i in range(3):
+            shadow_alpha = 15 - (i * 5)  # Layered shadows for depth
+            shadow_offset_ratio = 0.002 + (i * 0.004)  # Scale shadow offset by window size
+            shadow_rect = QRectF(
+                bg_rect.x() + self.width() * shadow_offset_ratio,
+                bg_rect.y() + self.height() * shadow_offset_ratio,
+                bg_rect.width(),
+                bg_rect.height()
+            )
+            painter.setBrush(QBrush(QColor(0, 0, 0, shadow_alpha)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            corner_radius = min(self.width(), self.height()) * 0.05  # 5% of smaller dimension
+            painter.drawRoundedRect(shadow_rect, corner_radius, corner_radius)
+        
+        # Draw main background with consistent corner radius
+        painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(bg_rect, 30, 30)
+        corner_radius = min(self.width(), self.height()) * 0.05  # 5% of smaller dimension
+        painter.drawRoundedRect(bg_rect, corner_radius, corner_radius)
 
     def _draw_neon_border(self, painter):
-        """Draw a clean, glowing cyan border to match the reference design."""
-        popup_rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
-
-        # Outer glow effect (subtle)
-        glow_color = QColor(51, 193, 255, 80)
-        painter.setPen(QPen(glow_color, 4))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(popup_rect, 30, 30)
-
-        # Main border line
-        border_color = QColor(51, 193, 255, 255)  # #33C1FF - exact cyan
-        painter.setPen(QPen(border_color, 1.5))
-        painter.drawRoundedRect(popup_rect, 30, 30)
+        """Skip border - modern design doesn't need it with proper shadow"""
+        pass  # Border removed for cleaner look
 
     def _draw_waveform(self, painter, waveform_rect=None):
         """Draw symmetric waveform matching reference design"""
@@ -285,19 +291,15 @@ class RecordingPopup(QWidget):
 
         num_bars = 60  # Number of bars
         total_width = waveform_rect.width()
-        bar_width = 3  # Fixed bar width in pixels
-        spacing = 2  # Fixed spacing between bars
+        bar_width = total_width * 0.01  # 1% of waveform width
+        spacing = total_width * 0.006  # 0.6% of waveform width
 
         # Calculate total space needed and center the bars
         total_bars_width = (bar_width + spacing) * num_bars
         start_x = waveform_rect.left() + (total_width - total_bars_width) / 2
 
-        import random
-
-        # Set pen and brush once for all bars
+        # Modern waveform with sophisticated gradient
         painter.setPen(Qt.PenStyle.NoPen)  # No outline
-        bar_brush = QBrush(QColor(51, 193, 255, 255))  # #33C1FF - cyan from reference
-        painter.setBrush(bar_brush)
 
         for i in range(num_bars):
             x = start_x + i * (bar_width + spacing)
@@ -327,7 +329,7 @@ class RecordingPopup(QWidget):
             random_factor = random.random() * 0.2 + 0.8  # 0.8 to 1.0
 
             # Calculate bar height
-            min_height = 2
+            min_height = waveform_rect.height() * 0.02  # 2% minimum height
             max_height = waveform_rect.height() * 0.45  # Half height for symmetry
 
             # Combine factors
@@ -348,97 +350,159 @@ class RecordingPopup(QWidget):
             # Ensure minimum visibility
             half_amplitude = max(min_height, min(half_amplitude, max_height))
 
-            # Draw symmetric bars (top and bottom from center)
-            # Top bar
-            top_rect = QRectF(
+            # Calculate opacity based on distance from center for sophistication
+            center_position = num_bars / 2
+            distance_ratio = abs(i - center_position) / center_position
+            
+            # Elegant opacity gradient from center to edges
+            bar_opacity = int(255 * (1.0 - distance_ratio * 0.4))  # 100% center to 60% edges
+            
+            # Create gradient for each bar
+            bar_gradient = QLinearGradient(x, center_y - half_amplitude, x, center_y + half_amplitude)
+            bar_gradient.setColorAt(0.0, QColor(0, 0, 0, bar_opacity))
+            bar_gradient.setColorAt(0.5, QColor(20, 20, 20, bar_opacity))  # Slightly lighter center
+            bar_gradient.setColorAt(1.0, QColor(0, 0, 0, bar_opacity))
+            
+            # Draw symmetric bars with gradient
+            # Combined rect for efficiency
+            full_bar_rect = QRectF(
                 x,
                 center_y - half_amplitude,
                 bar_width,
-                half_amplitude
+                half_amplitude * 2
             )
-            painter.fillRect(top_rect, bar_brush)
-
-            # Bottom bar (mirror)
-            bottom_rect = QRectF(
-                x,
-                center_y,
-                bar_width,
-                half_amplitude
-            )
-            painter.fillRect(bottom_rect, bar_brush)
+            painter.fillRect(full_bar_rect, QBrush(bar_gradient))
 
     def _draw_particle_dots(self, painter, waveform_rect):
-        """Draw floating particle dots around waveform for dynamic effect"""
-        import random
-
+        """Draw floating particle dots with depth layers for professional appearance"""
+        # Enable high quality antialiasing for sharp particles
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        
+        # Create depth layers for particles (back to front)
+        particle_layers = [
+            {'count': 15, 'size_mult': 1.5, 'opacity_mult': 0.3, 'blur_effect': True},   # Background
+            {'count': 10, 'size_mult': 1.0, 'opacity_mult': 0.6, 'blur_effect': False},  # Midground  
+            {'count': 10, 'size_mult': 0.7, 'opacity_mult': 1.0, 'blur_effect': False},  # Foreground
+        ]
+        
         # Set random seed based on phase for animated particles
         random.seed(int(self.phase * 10))
+        
+        layer_index = 0
+        for layer in particle_layers:
+            for i in range(layer['count']):
+                # Random position around waveform
+                x_offset = (random.random() - 0.5) * waveform_rect.width() * 1.2
+                y_offset = (random.random() - 0.5) * waveform_rect.height() * 1.5
 
-        # Draw 30-40 particle dots
-        num_particles = 35
+                # Position relative to waveform center
+                x = waveform_rect.center().x() + x_offset
+                y = waveform_rect.center().y() + y_offset
 
-        for i in range(num_particles):
-            # Random position around waveform
-            # Concentrate particles near the center
-            x_offset = (random.random() - 0.5) * waveform_rect.width() * 1.2
-            y_offset = (random.random() - 0.5) * waveform_rect.height() * 1.5
-
-            # Position relative to waveform center
-            x = waveform_rect.center().x() + x_offset
-            y = waveform_rect.center().y() + y_offset
-
-            # Vary particle size and opacity
-            size = random.random() * 2 + 1  # 1-3 pixels
-            base_alpha = random.randint(20, 80)
-
-            # Pulse effect for particles
-            pulse = math.sin(self.phase * 3 + i) * 0.3 + 0.7
-            alpha = int(base_alpha * pulse)
-
-            # Draw particle dot
-            particle_color = QColor(51, 193, 255, alpha)  # Cyan with varying opacity
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(particle_color))
-            painter.drawEllipse(QPointF(x, y), size, size)
+                # Layer-specific particle size
+                base_size = min(self.width(), self.height()) * 0.01
+                size = base_size * layer['size_mult']
+                
+                # Layer-specific opacity
+                center_dist = math.sqrt(x_offset**2 + y_offset**2) / (waveform_rect.width() * 0.6)
+                base_alpha = int(180 * (1.0 - min(center_dist, 1.0)))
+                
+                # Slower, subtler pulse
+                pulse = math.sin(self.phase * 0.5 + i * 0.2 + layer_index) * 0.1 + 0.9
+                alpha = max(30, int(base_alpha * pulse * layer['opacity_mult']))
+                
+                # Darker particles for better contrast
+                particle_color = QColor(60, 50, 80, alpha)
+                
+                # Use QPainterPath for smooth, antialiased circles
+                path = QPainterPath()
+                path.addEllipse(QPointF(x, y), size, size)
+                
+                # Apply layer-specific blur effect if needed
+                if layer['blur_effect']:
+                    # Simulate blur with multiple transparent circles
+                    for blur_level in range(3):
+                        blur_alpha = alpha // (3 + blur_level * 2)
+                        blur_size = size * (1 + blur_level * 0.3)
+                        blur_color = QColor(60, 50, 80, blur_alpha)
+                        blur_path = QPainterPath()
+                        blur_path.addEllipse(QPointF(x, y), blur_size, blur_size)
+                        painter.fillPath(blur_path, blur_color)
+                else:
+                    # Sharp particles for foreground
+                    painter.fillPath(path, particle_color)
+            
+            layer_index += 1
 
     def _draw_microphone_icon(self, painter, content_rect):
         """Draw microphone icon at bottom center of popup"""
-        # Icon position at bottom center
+        # Icon position using ratios (90% from top)
         icon_x = content_rect.center().x()
-        icon_y = content_rect.bottom() - 20
+        icon_y = content_rect.y() + content_rect.height() * 0.9
 
-        # Draw microphone shape with glow effect
+        # Draw microphone shape - scale based on window size
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # Outer glow
-        for i in range(3):
-            alpha = 60 - i * 20
-            size = 16 + i * 2
-            painter.setPen(QPen(QColor(51, 193, 255, alpha), 2))  # Cyan #33C1FF
+        
+        # Icon size based on content rect dimensions
+        icon_size = content_rect.height() * 0.05  # 5% of content height
+        
+        # Subtle glow using ratios
+        for i in range(2):  # Reduced glow layers for cleaner look
+            alpha = 40 - i * 20
+            glow_size = icon_size * (1 + i * 0.15)  # 15% size increase per layer
+            painter.setPen(QPen(QColor(100, 80, 120, alpha), 1))  # Purple tint to match particles
             painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-
+            
             # Microphone body (rounded rectangle)
-            mic_rect = QRectF(icon_x - size/2, icon_y - size, size, size * 1.5)
-            painter.drawRoundedRect(mic_rect, size/2, size/2)
+            mic_rect = QRectF(
+                icon_x - glow_size/2, 
+                icon_y - glow_size, 
+                glow_size, 
+                glow_size * 1.5
+            )
+            painter.drawRoundedRect(mic_rect, glow_size/2, glow_size/2)
 
-        # Main microphone icon
-        painter.setPen(QPen(QColor(51, 193, 255, 200), 2))  # Cyan
-        painter.setBrush(QBrush(QColor(51, 193, 255, 100)))
-
+        # Main microphone icon with ratio-based sizing
+        icon_size = content_rect.height() * 0.05
+        painter.setPen(QPen(QColor(80, 80, 80, 180), 1.5))  # Dark gray to match waveform
+        painter.setBrush(QBrush(QColor(80, 80, 80, 80)))
+        
         # Microphone body
-        mic_rect = QRectF(icon_x - 7, icon_y - 14, 14, 20)
-        painter.drawRoundedRect(mic_rect, 7, 7)
-
+        mic_width = icon_size * 0.7
+        mic_height = icon_size * 1.0
+        mic_rect = QRectF(
+            icon_x - mic_width/2, 
+            icon_y - mic_height, 
+            mic_width, 
+            mic_height
+        )
+        painter.drawRoundedRect(mic_rect, mic_width/2, mic_width/2)
+        
         # Microphone stand
-        painter.setPen(QPen(QColor(51, 193, 255, 200), 2))
-        painter.drawLine(QPointF(icon_x, icon_y + 6), QPointF(icon_x, icon_y + 12))
-
+        painter.setPen(QPen(QColor(80, 80, 80, 180), 1.5))
+        stand_height = icon_size * 0.3
+        painter.drawLine(
+            QPointF(icon_x, icon_y), 
+            QPointF(icon_x, icon_y + stand_height)
+        )
+        
         # Microphone base
-        painter.drawLine(QPointF(icon_x - 8, icon_y + 12), QPointF(icon_x + 8, icon_y + 12))
-
+        base_width = icon_size * 0.8
+        painter.drawLine(
+            QPointF(icon_x - base_width/2, icon_y + stand_height), 
+            QPointF(icon_x + base_width/2, icon_y + stand_height)
+        )
+        
         # Microphone arc (sound capture area)
         painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        arc_rect = QRectF(icon_x - 12, icon_y - 10, 24, 24)
+        arc_size = icon_size * 1.2
+        arc_rect = QRectF(
+            icon_x - arc_size/2, 
+            icon_y - mic_height * 0.7, 
+            arc_size, 
+            arc_size
+        )
         painter.drawArc(arc_rect, 30 * 16, 120 * 16)  # Arc from 30 to 150 degrees
 
     def _format_time(self, seconds: float) -> str:
@@ -509,19 +573,7 @@ class RecordingPopup(QWidget):
         # Prevent focus from being taken
         event.accept()
 
-    def _on_stop_clicked(self):
-        """Handle stop action"""
-        print("✅ Stop clicked")
-        if self.on_stop_callback:
-            self.on_stop_callback()
-        self.hide()
 
-    def _on_cancel_clicked(self):
-        """Handle cancel action"""
-        print("❌ Recording cancelled")
-        if self.on_cancel_callback:
-            self.on_cancel_callback()
-        self.hide()
 
 
 class RecordingPopupManager:
