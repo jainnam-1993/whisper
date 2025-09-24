@@ -5,7 +5,7 @@ Uses PyQt6 for proper floating window without dock icon on macOS
 
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
-from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush, QPainterPath
+from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush, QPixmap
 import sys
 import time
 import random
@@ -91,7 +91,7 @@ class RecordingPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)  # Force always on top
 
         # Set window opacity for transparency effect
-        self.setWindowOpacity(0.95)  # Slight transparency
+        self.setWindowOpacity(0.85)  # More transparency for elegant look
 
         # Prevent focus stealing - critical for paste functionality
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -196,9 +196,6 @@ class RecordingPopup(QWidget):
         )
         self._draw_waveform(painter, waveform_rect)
 
-        # Draw particle dots around waveform
-        self._draw_particle_dots(painter, waveform_rect)
-
         # Draw timer with rounded background
         if self.start_time:
             elapsed = time.time() - self.start_time
@@ -223,7 +220,7 @@ class RecordingPopup(QWidget):
         # Timer text - bold and clean
         painter.setPen(QPen(QColor(16, 24, 32)))  # Almost black for strong contrast  # Cyan color #33C1FF
         timer_font_size = int(self.height() * 0.08)  # 8% of window height
-        timer_font = QFont("SF Pro Display", timer_font_size, QFont.Weight.DemiBold)  # Modern system font
+        timer_font = QFont("Arial", timer_font_size, QFont.Weight.DemiBold)  # Cross-platform font  # Modern system font
         timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2)  # Add letter spacing
         painter.setFont(timer_font)
         painter.drawText(timer_rect, Qt.AlignmentFlag.AlignCenter, time_str)
@@ -373,67 +370,9 @@ class RecordingPopup(QWidget):
             )
             painter.fillRect(full_bar_rect, QBrush(bar_gradient))
 
-    def _draw_particle_dots(self, painter, waveform_rect):
-        """Draw floating particle dots with depth layers for professional appearance"""
-        # Enable high quality antialiasing for sharp particles
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        
-        # Create depth layers for particles (back to front)
-        particle_layers = [
-            {'count': 15, 'size_mult': 1.5, 'opacity_mult': 0.3, 'blur_effect': True},   # Background
-            {'count': 10, 'size_mult': 1.0, 'opacity_mult': 0.6, 'blur_effect': False},  # Midground  
-            {'count': 10, 'size_mult': 0.7, 'opacity_mult': 1.0, 'blur_effect': False},  # Foreground
-        ]
-        
-        # Set random seed based on phase for animated particles
-        random.seed(int(self.phase * 10))
-        
-        layer_index = 0
-        for layer in particle_layers:
-            for i in range(layer['count']):
-                # Random position around waveform
-                x_offset = (random.random() - 0.5) * waveform_rect.width() * 1.2
-                y_offset = (random.random() - 0.5) * waveform_rect.height() * 1.5
 
-                # Position relative to waveform center
-                x = waveform_rect.center().x() + x_offset
-                y = waveform_rect.center().y() + y_offset
 
-                # Layer-specific particle size
-                base_size = min(self.width(), self.height()) * 0.01
-                size = base_size * layer['size_mult']
-                
-                # Layer-specific opacity
-                center_dist = math.sqrt(x_offset**2 + y_offset**2) / (waveform_rect.width() * 0.6)
-                base_alpha = int(180 * (1.0 - min(center_dist, 1.0)))
-                
-                # Slower, subtler pulse
-                pulse = math.sin(self.phase * 0.5 + i * 0.2 + layer_index) * 0.1 + 0.9
-                alpha = max(30, int(base_alpha * pulse * layer['opacity_mult']))
-                
-                # Darker particles for better contrast
-                particle_color = QColor(60, 50, 80, alpha)
-                
-                # Use QPainterPath for smooth, antialiased circles
-                path = QPainterPath()
-                path.addEllipse(QPointF(x, y), size, size)
-                
-                # Apply layer-specific blur effect if needed
-                if layer['blur_effect']:
-                    # Simulate blur with multiple transparent circles
-                    for blur_level in range(3):
-                        blur_alpha = alpha // (3 + blur_level * 2)
-                        blur_size = size * (1 + blur_level * 0.3)
-                        blur_color = QColor(60, 50, 80, blur_alpha)
-                        blur_path = QPainterPath()
-                        blur_path.addEllipse(QPointF(x, y), blur_size, blur_size)
-                        painter.fillPath(blur_path, blur_color)
-                else:
-                    # Sharp particles for foreground
-                    painter.fillPath(path, particle_color)
-            
-            layer_index += 1
+
 
     def _draw_microphone_icon(self, painter, content_rect):
         """Draw microphone icon at bottom center of popup"""
@@ -666,3 +605,28 @@ def hide_recording_popup():
 def is_recording_popup_visible() -> bool:
     """Check if recording popup is visible"""
     return popup_manager.popup and popup_manager.popup.is_showing()
+
+# Test code for standalone execution
+if __name__ == "__main__":
+    """Test the recording popup independently"""
+    import sys
+    
+    app = QApplication(sys.argv)
+    
+    # Create and show the popup
+    popup = RecordingPopup()
+    popup.show()
+    
+    # Start a timer to hide after 10 seconds
+    hide_timer = QTimer()
+    hide_timer.timeout.connect(lambda: (popup.hide(), app.quit()))
+    hide_timer.start(10000)  # 10 seconds
+    
+    print("🎤 Showing recording popup for 10 seconds...")
+    print("   The popup should display with:")
+    print("   - Gradient background")
+    print("   - Animated waveform")
+    print("   - Blurred particle layers")
+    print("   - Timer display")
+    
+    sys.exit(app.exec())
