@@ -99,6 +99,8 @@ class RealtimeSTTWrapper(TranscriptionService):
                 # Model configuration - same as your current setup
                 "model": self.model_name,
                 "language": self.language,
+                "device": "mps",              # Metal Performance Shaders for M4 Pro GPU
+                "compute_type": "auto",       # Auto-select best precision for device
                 "realtime_model_type": self.model_name,  # Use same model for realtime
                 "use_main_model_for_realtime": True,     # Force using main model
 
@@ -232,8 +234,8 @@ class RealtimeSTTWrapper(TranscriptionService):
                 print("🛑 Stopping RealtimeSTT recorder...")
                 
                 # Use unified approach: stop with backdate trimming + direct text retrieval
-                # Use min_length_of_recording from settings as backdate trim duration
-                trim_duration = self.settings.get('min_length_of_recording', 0.3) if hasattr(self, 'settings') else 0.3
+                # Use min_length_of_recording from config as backdate trim duration
+                trim_duration = self.min_length_of_recording if hasattr(self, 'min_length_of_recording') and self.min_length_of_recording is not None else 0.3
                 self.recorder.stop(backdate_stop_seconds=trim_duration, backdate_resume_seconds=trim_duration)
                 text = self.recorder.text()
                 print("✅ RealtimeSTT recorder stopped successfully")

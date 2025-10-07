@@ -6,7 +6,7 @@ Listens for double Right Command press to trigger transcription.
 
 # Configuration - Change backend here (no code deletion)
 CONFIG = {
-    "model_name": "medium",
+    "model_name": "small",
     "language": "en",
     # Double command key specific settings (manual control)
     "keyboard_settings": {
