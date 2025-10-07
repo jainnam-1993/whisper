@@ -6,6 +6,7 @@ Uses PyQt6 for proper floating window without dock icon on macOS
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush, QPixmap
+from ctypes import c_void_p
 import sys
 import time
 import random
@@ -91,7 +92,41 @@ class RecordingPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)  # Force always on top
 
         # Set window opacity for glassmorphism effect (more transparent)
-        self.setWindowOpacity(0.75)  # 75% opacity for strong glass effect
+        self.setWindowOpacity(0.85)  # 85% opacity
+        
+        # ====================================================================
+        # CRITICAL: Enable native macOS backdrop blur (like Terminal.app)
+        # ====================================================================
+        try:
+            # Import macOS native blur support
+            from PyQt6.QtCore import QMetaObject
+            # Enable backdrop blur effect on macOS
+            # This gives us the same blur as Terminal/Finder windows
+            self.setAttribute(Qt.WidgetAttribute.WA_MacVariableSize, True)
+            
+            # Try to enable graphite effect (blur behind window)
+            import objc
+            from Cocoa import NSVisualEffectView, NSView
+            from AppKit import NSVisualEffectBlendingModeBehindWindow, NSVisualEffectMaterialHUDWindow
+            
+            # Get the native macOS window
+            ns_view = objc.objc_object(c_void_p=int(self.winId()))
+            ns_window = ns_view.window()
+            
+            # Create visual effect view (native macOS blur)
+            effect_view = NSVisualEffectView.alloc().initWithFrame_(ns_view.bounds())
+            effect_view.setAutoresizingMask_(18)  # Flexible width and height
+            effect_view.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
+            effect_view.setMaterial_(NSVisualEffectMaterialHUDWindow)  # Dark blur like HUD
+            effect_view.setState_(1)  # Active state
+            
+            # Insert as bottom layer
+            ns_view.addSubview_positioned_relativeTo_(effect_view, 0, None)
+            
+            print("✅ Native macOS backdrop blur enabled")
+        except Exception as e:
+            print(f"⚠️ Backdrop blur unavailable (needs macOS): {e}")
+            # Fallback: Qt will use transparency only
 
         # Prevent focus stealing - critical for paste functionality
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
