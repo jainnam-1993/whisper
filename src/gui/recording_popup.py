@@ -90,8 +90,8 @@ class RecordingPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)  # Accept mouse events
         self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)  # Force always on top
 
-        # Set window opacity for glassmorphism effect (higher transparency)
-        self.setWindowOpacity(0.92)  # High transparency for glass effect
+        # Set window opacity for glassmorphism effect (more transparent)
+        self.setWindowOpacity(0.75)  # 75% opacity for strong glass effect
 
         # Prevent focus stealing - critical for paste functionality
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -308,51 +308,51 @@ class RecordingPopup(QWidget):
         corner_radius = min(self.width(), self.height()) * 0.06  # 6% corner radius
         
         # ====================================================================
-        # LAYER 1: Outer shadow (furthest, most diffuse)
+        # LAYER 1: Outer shadow (furthest, most diffuse) - DARKER
         # ====================================================================
-        painter.setBrush(QBrush(QColor(0, 0, 0, 8)))  # Very subtle
+        painter.setBrush(QBrush(QColor(0, 0, 0, 40)))  # Much darker
         painter.setPen(Qt.PenStyle.NoPen)
         outer_shadow_rect = QRectF(
-            bg_rect.x() + self.width() * 0.008,
-            bg_rect.y() + self.height() * 0.012,
+            bg_rect.x() + self.width() * 0.012,
+            bg_rect.y() + self.height() * 0.018,
             bg_rect.width(),
             bg_rect.height()
         )
         painter.drawRoundedRect(outer_shadow_rect, corner_radius, corner_radius)
         
         # ====================================================================
-        # LAYER 2: Mid shadow (creates depth)
+        # LAYER 2: Mid shadow (creates depth) - DARKER
         # ====================================================================
-        painter.setBrush(QBrush(QColor(0, 0, 0, 18)))
+        painter.setBrush(QBrush(QColor(0, 0, 0, 60)))  # Much darker
         mid_shadow_rect = QRectF(
-            bg_rect.x() + self.width() * 0.004,
-            bg_rect.y() + self.height() * 0.006,
+            bg_rect.x() + self.width() * 0.006,
+            bg_rect.y() + self.height() * 0.010,
             bg_rect.width(),
             bg_rect.height()
         )
         painter.drawRoundedRect(mid_shadow_rect, corner_radius, corner_radius)
         
         # ====================================================================
-        # LAYER 3: Inner shadow (sharp, close to surface)
+        # LAYER 3: Inner shadow (sharp, close to surface) - DARKEST
         # ====================================================================
-        painter.setBrush(QBrush(QColor(0, 0, 0, 25)))
+        painter.setBrush(QBrush(QColor(0, 0, 0, 80)))  # Darkest shadow
         inner_shadow_rect = QRectF(
-            bg_rect.x() + self.width() * 0.002,
-            bg_rect.y() + self.height() * 0.003,
+            bg_rect.x() + self.width() * 0.003,
+            bg_rect.y() + self.height() * 0.005,
             bg_rect.width(),
             bg_rect.height()
         )
         painter.drawRoundedRect(inner_shadow_rect, corner_radius, corner_radius)
         
         # ====================================================================
-        # MAIN SURFACE: Glassmorphism with gradient overlay
+        # MAIN SURFACE: Rich colorful glassmorphism gradient
         # ====================================================================
-        # Ultra-transparent gradient (glassmorphism signature)
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor(255, 255, 255, 160))  # 63% transparency
-        gradient.setColorAt(0.3, QColor(245, 250, 255, 145))  # Subtle blue tint
-        gradient.setColorAt(0.7, QColor(255, 245, 250, 145))  # Subtle pink tint
-        gradient.setColorAt(1.0, QColor(250, 250, 255, 150))  # Subtle purple
+        # Vibrant colors with good saturation
+        gradient.setColorAt(0.0, QColor(180, 210, 255, 120))  # Rich blue
+        gradient.setColorAt(0.35, QColor(200, 180, 255, 115))  # Purple
+        gradient.setColorAt(0.65, QColor(255, 190, 230, 115))  # Pink
+        gradient.setColorAt(1.0, QColor(255, 220, 200, 120))   # Peachy
         
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
@@ -436,8 +436,8 @@ class RecordingPopup(QWidget):
 
             half_amplitude = min_height + (max_height - min_height) * height_factor
 
-            # Add audio level influence
-            half_amplitude = half_amplitude * (0.6 + level * 0.4)
+            # Add STRONG audio level influence for dramatic response
+            half_amplitude = half_amplitude * (0.3 + level * 0.7)  # 70% influenced by sound
 
             # Ensure minimum visibility
             half_amplitude = max(min_height, min(half_amplitude, max_height))
@@ -591,13 +591,14 @@ class RecordingPopup(QWidget):
             # Clamp to valid range
             raw_level = max(0.0, min(1.0, level))
             
-            # Apply exponential curve for better visual dynamics
-            # This makes the waveform respond more dramatically to louder sounds
-            enhanced_level = pow(raw_level, 0.6)  # Power < 1 amplifies mid-range
+            # Apply aggressive exponential curve for DRAMATIC visual response
+            # Power 0.4 = much more amplification of mid-range sounds
+            enhanced_level = pow(raw_level, 0.4) * 1.5  # Amplify by 1.5x
+            enhanced_level = min(1.0, enhanced_level)  # Clamp to max
             
-            # Add slight smoothing to prevent jitter
+            # Minimal smoothing to keep it snappy and reactive
             if hasattr(self, '_prev_level'):
-                smoothing = 0.3  # 30% of previous, 70% new
+                smoothing = 0.15  # Only 15% smoothing = very reactive
                 enhanced_level = self._prev_level * smoothing + enhanced_level * (1 - smoothing)
             
             self._prev_level = enhanced_level
