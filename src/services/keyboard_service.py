@@ -4,21 +4,19 @@ Host-side key listener for whisper dictation.
 Listens for double Right Command press to trigger transcription.
 """
 
-# Configuration - Change backend here (no code deletion)
-CONFIG = {
-    "model_name": "small",
-    "language": "en",
-    # Double command key specific settings (manual control)
-    "keyboard_settings": {
-        "enable_realtime": False,
-        "pre_buffer_duration": 3.0,
-        "vad_sensitivity": 0.3,
-        "post_speech_silence_duration": None,  # Explicit None for manual control
-        "webrtc_sensitivity": 2,
-        "min_length_of_recording": 0.0,
-        "min_gap_between_recordings": 0.0
-    }
-}
+# ============================================================================
+# CRITICAL: Patch faster-whisper BEFORE any RealtimeSTT imports
+# ============================================================================
+# This monkey-patches sys.modules to intercept faster_whisper imports
+# and redirect them to whisper.cpp for Metal GPU acceleration
+# ============================================================================
+from ..backends.whispercpp_fasterwhisper_compat import patch_realtimestt
+patch_realtimestt()
+
+# ============================================================================
+# IMPORT UNIFIED CONFIGURATION
+# ============================================================================
+from ..config import CONFIG, BACKEND
 
 import time
 import traceback
@@ -30,19 +28,30 @@ from ..utils.recording_events import RecordingEvent
 class RealtimeSTTCommunicator:
     """RealtimeSTT backend for keyboard-triggered transcription"""
 
-    def __init__(self, model, language, settings):
+    def __init__(self, model, language, settings, backend="realtimestt"):
 
         try:
-            from ..backends.realtimestt_backend import RealtimeSTTWrapper
             from ..utils.clipboard import TranscriptionHandler, ClipboardManager
 
-            # For keyboard trigger: use direct recording
-            self.transcription_service = RealtimeSTTWrapper(
-                model=model,
-                language=language,
-                wake_words=None,
-                config=settings  # Pass keyboard-specific config
-            )
+            # Select backend based on configuration
+            if backend.startswith("whisper.cpp"):
+                from ..backends.whispercpp_realtimestt_bridge import WhisperCppRealtimeSTTBridge
+                print(f"🚀 Using whisper.cpp backend with Metal GPU acceleration")
+                self.transcription_service = WhisperCppRealtimeSTTBridge(
+                    model=model,
+                    language=language,
+                    wake_words=None,
+                    config=settings
+                )
+            else:
+                from ..backends.realtimestt_backend import RealtimeSTTWrapper
+                print(f"🎙️ Using RealtimeSTT backend with faster-whisper")
+                self.transcription_service = RealtimeSTTWrapper(
+                    model=model,
+                    language=language,
+                    wake_words=None,
+                    config=settings  # Pass keyboard-specific config
+                )
 
             # Use centralized transcription handler
             clipboard = ClipboardManager()
@@ -153,12 +162,13 @@ class RealtimeSTTCommunicator:
             except Exception as e:
                 print(f"Warning: Could not hide recording popup: {e}")
 
-def create_backend(config):
-    """Create RealtimeSTT backend with keyboard settings"""
+def create_backend(config, backend="realtimestt"):
+    """Create transcription backend with keyboard settings"""
     return RealtimeSTTCommunicator(
         model=config["model_name"],
         language=config["language"],
-        settings=config["keyboard_settings"]
+        settings=config["keyboard_settings"],
+        backend=backend
     )
 
 # DockerCommunicator removed - using RealtimeSTT only
@@ -228,8 +238,8 @@ def main():
             from ..utils.recording_events import RecordingEventManager
             event_manager = RecordingEventManager()
 
-            # Create RealtimeSTT backend
-            communicator = create_backend(CONFIG)
+            # Create transcription backend (whisper.cpp or RealtimeSTT)
+            communicator = create_backend(CONFIG, backend=BACKEND)
             key_listener = DoubleCommandKeyListener(communicator, event_manager)
 
             # DISABLED: Wake word listener (keeping only double command for simplicity)

@@ -36,7 +36,7 @@ whisper/
 - **No wake words**: Direct recording without "Jarvis" detection
 - **Threading**: Background thread for recording
 
-#### 2. Wake Word Workflow  
+#### 2. Wake Word Workflow
 **Flow**: Say "Jarvis" → Recording starts → Right Cmd → Stop & Paste
 - **Entry Point**: `wake_word_service.py` → `WakeWordService`
 - **Recording**: `RealtimeSTTWrapper` with wake word detection
@@ -55,7 +55,7 @@ whisper/
 - **Configuration**: Handles VAD, wake words, silence detection
 
 #### Keyboard Service (`src/services/keyboard_service.py`)
-- **Classes**: 
+- **Classes**:
   - `RealtimeSTTCommunicator`: Manual recording handler
   - `DoubleCommandKeyListener`: Key press detection
 - **Key Logic**:
@@ -102,13 +102,13 @@ whisper/
 **Current Code (BROKEN after our fix):**
 ```python
 # Line 172 - We changed this to -999
-self.last_press_time = -999  
+self.last_press_time = -999
 
 # Line 182 - But this logic is incompatible!
 time_diff = current_time - self.last_press_time if self.last_press_time > 0 else 999
 ```
 
-**Problem**: 
+**Problem**:
 - `last_press_time = -999` (negative)
 - Condition `self.last_press_time > 0` is FALSE
 - So `time_diff = 999` (the else value)
@@ -127,7 +127,7 @@ else:
 ```
 
 ### 🐛 Issue 2: Double Pasting in Wake Word
-**Locations**: 
+**Locations**:
 - `src/services/wake_word_service.py:368` - Manual stop handler pastes
 - `src/services/wake_word_service.py:393` - `_process_final_text()` pastes again
 
@@ -165,7 +165,7 @@ CONFIG = {
 - Lines 191-196: Double-click detection (BROKEN)
 - Lines 198-201: Wake word manual stop
 
-### Wake Word Manual Stop Handler  
+### Wake Word Manual Stop Handler
 `src/services/wake_word_service.py:352-380` - `_on_manual_stop_requested()`
 - Line 360: Unified stop with backdate
 - Line 368: First paste (correct)
@@ -183,7 +183,7 @@ CONFIG = {
 ## Testing Checklist
 **Note**: User will test manually - ask for confirmation before testing
 - [ ] Double Right Command starts recording
-- [ ] Single Right Command stops manual recording  
+- [ ] Single Right Command stops manual recording
 - [ ] Wake word "Jarvis" activates
 - [ ] Right Command during wake word stops and pastes once
 - [ ] No duplicate pasting in any workflow
@@ -201,7 +201,7 @@ CONFIG = {
 - Added explicit `post_speech_silence_duration: None` to keyboard_settings
 - Replaced infinite loop with event-based waiting in manual mode
 
-#### 2. Double Pasting Fixed  
+#### 2. Double Pasting Fixed
 **Solution**: Added proper check after `recorder.text()` returns
 - Check `manual_stop_requested` flag after `recorder.text()` completes
 - Discard duplicate text if manual stop occurred during transcription
@@ -221,7 +221,7 @@ CONFIG = {
 
 ### Main Function Flow (`keyboard_service.py:220-292`)
 1. Creates `RecordingEventManager` for inter-service communication
-2. Creates `RealtimeSTTCommunicator` via `create_backend()` 
+2. Creates `RealtimeSTTCommunicator` via `create_backend()`
 3. Creates `DoubleCommandKeyListener` with communicator and event manager
 4. Starts wake word listener in parallel thread (if configured)
 5. Starts keyboard listener
@@ -257,7 +257,7 @@ User: Double Right Cmd
 │       ├─> Creates background thread
 │       └─> Thread calls transcription_service.transcribe()
 │           └─> BLOCKS until speech complete or abort
-User: Single Right Cmd  
+User: Single Right Cmd
 ├─> DoubleCommandKeyListener.on_key_press()
 │   ├─> Checks is_transcribing == True
 │   └─> Calls communicator.stop_recording()
@@ -291,10 +291,10 @@ Meanwhile: Original recorder.text() continues
 def start_recording(self):
     if self.is_transcribing:
         return
-    
+
     self.is_transcribing = True  # Set flag
     self.stop_requested = False
-    
+
     def record_in_background():
         try:
             # This BLOCKS until complete
@@ -302,7 +302,7 @@ def start_recording(self):
             # Process and paste...
         finally:
             self.is_transcribing = False  # Clear flag
-    
+
     self.recording_thread = create_daemon_thread(...)
     self.recording_thread.start()
 ```
@@ -325,4 +325,5 @@ def start_recording(self):
 - The `text_already_processed` flag exists but isn't being checked properly
 ## Sessions System Behaviors
 
+## Behavioral Rules
 @CLAUDE.sessions.md

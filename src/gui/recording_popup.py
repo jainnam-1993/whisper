@@ -126,7 +126,14 @@ class RecordingPopup(QWidget):
     def _update_animation(self):
         """Update animation phase for pulsing effects and waveform movement"""
         if self.is_visible and not self.stop_animation:
-            self.phase += 0.02  # Slower animation for less pixelation
+            # Simple velocity-based easing without heavy computation
+            if not hasattr(self, 'phase_velocity'):
+                self.phase_velocity = 0.0
+            
+            # Smooth acceleration with minimal calculation
+            target_velocity = 0.02
+            self.phase_velocity += (target_velocity - self.phase_velocity) * 0.1
+            self.phase += self.phase_velocity
             self.update()  # Trigger repaint
 
     def show(self):
@@ -243,11 +250,11 @@ class RecordingPopup(QWidget):
             self.height() * (1 - 2 * padding_ratio)
         )
         
-        # Modern gradient with color instead of white
+        # Softer gradient with muted tones and alpha for subtlety
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor(230, 240, 255))  # Light blue tint
-        gradient.setColorAt(0.5, QColor(245, 235, 255))  # Light purple center
-        gradient.setColorAt(1.0, QColor(255, 230, 245))  # Light pink bottom
+        gradient.setColorAt(0.0, QColor(235, 245, 255, 240))  # Softer blue with alpha
+        gradient.setColorAt(0.5, QColor(250, 240, 255, 240))  # Muted purple
+        gradient.setColorAt(1.0, QColor(255, 235, 250, 240))  # Subtle pink
         
         # Professional shadow with proper elevation using ratios
         for i in range(3):
@@ -360,8 +367,20 @@ class RecordingPopup(QWidget):
             bar_gradient.setColorAt(0.5, QColor(20, 20, 20, bar_opacity))  # Slightly lighter center
             bar_gradient.setColorAt(1.0, QColor(0, 0, 0, bar_opacity))
             
-            # Draw symmetric bars with gradient
-            # Combined rect for efficiency
+            # Draw shadow first for depth
+            shadow_rect = QRectF(
+                x + 1,  # Slight offset
+                center_y - half_amplitude + 1,
+                bar_width,
+                half_amplitude * 2
+            )
+            shadow_gradient = QLinearGradient(x, center_y - half_amplitude, x, center_y + half_amplitude)
+            shadow_gradient.setColorAt(0.0, QColor(0, 0, 0, 20))
+            shadow_gradient.setColorAt(0.5, QColor(0, 0, 0, 40))
+            shadow_gradient.setColorAt(1.0, QColor(0, 0, 0, 20))
+            painter.fillRect(shadow_rect, QBrush(shadow_gradient))
+            
+            # Draw main bar on top
             full_bar_rect = QRectF(
                 x,
                 center_y - half_amplitude,
