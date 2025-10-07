@@ -90,15 +90,22 @@ class RecordingPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)  # Accept mouse events
         self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)  # Force always on top
 
-        # Set window opacity for transparency effect
-        self.setWindowOpacity(0.85)  # More transparency for elegant look
+        # Set window opacity for glassmorphism effect (higher transparency)
+        self.setWindowOpacity(0.92)  # High transparency for glass effect
 
         # Prevent focus stealing - critical for paste functionality
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         # Responsive size based on screen dimensions
         if self.app:
-            screen = self.app.primaryScreen()
+            # Get screen where cursor is (active monitor)
+            cursor_pos = self.app.primaryScreen().availableGeometry().center()
+            screen = self.app.screenAt(cursor_pos)
+            
+            # Fallback to primary if no screen detected at cursor
+            if not screen:
+                screen = self.app.primaryScreen()
+            
             if screen:
                 screen_rect = screen.geometry()
                 # Scale based on screen width (base: 1920px)
@@ -115,9 +122,9 @@ class RecordingPopup(QWidget):
                 
                 self.setFixedSize(popup_width, popup_height)
                 
-                # Center on screen
-                x = (screen_rect.width() - popup_width) // 2
-                y = (screen_rect.height() - popup_height) // 2 - int(100 * scale_factor)
+                # Center on ACTIVE screen (not primary)
+                x = screen_rect.x() + (screen_rect.width() - popup_width) // 2
+                y = screen_rect.y() + (screen_rect.height() - popup_height) // 2 - int(100 * scale_factor)
                 self.move(x, y)
             else:
                 # Fallback if no screen info
@@ -137,7 +144,7 @@ class RecordingPopup(QWidget):
             self.update()  # Trigger repaint
 
     def show(self):
-        """Display the recording popup"""
+        """Display the recording popup on active monitor"""
         if self.is_visible:
             return
 
@@ -145,6 +152,11 @@ class RecordingPopup(QWidget):
         self.stop_animation = False
         self.start_time = time.time()
         self.phase = 0.0  # Reset phase for fresh animation
+
+        # ====================================================================
+        # CRITICAL: Position on active monitor BEFORE showing
+        # ====================================================================
+        self._position_on_active_monitor()
 
         # Start animations
         self.animation_timer.start(30)  # ~33 FPS for smoother rendering
@@ -155,7 +167,41 @@ class RecordingPopup(QWidget):
         # Don't call raise_() or activateWindow() - those steal focus!
         # The WindowStaysOnTopHint flag handles staying on top
 
-        print(f"🔴 Recording popup displayed")
+        print(f"🔴 Recording popup displayed on active monitor")
+    
+    def _position_on_active_monitor(self):
+        """
+        Position popup on the monitor where the cursor currently is.
+        Called dynamically each time show() is invoked.
+        """
+        if not self.app:
+            return
+            
+        from PyQt6.QtGui import QCursor
+        
+        # Get current cursor position
+        cursor_pos = QCursor.pos()
+        
+        # Find which screen the cursor is on
+        screen = self.app.screenAt(cursor_pos)
+        
+        # Fallback to primary screen if detection fails
+        if not screen:
+            screen = self.app.primaryScreen()
+        
+        if screen:
+            screen_rect = screen.geometry()
+            
+            # Get current window size
+            popup_width = self.width()
+            popup_height = self.height()
+            
+            # Center on the active screen
+            x = screen_rect.x() + (screen_rect.width() - popup_width) // 2
+            y = screen_rect.y() + (screen_rect.height() - popup_height) // 2 - 100
+            
+            self.move(x, y)
+            print(f"📍 Positioned on screen: {screen_rect.width()}x{screen_rect.height()} at ({x}, {y})")
     def hide(self):
         """Hide the recording popup"""
         if not self.is_visible:
@@ -240,9 +286,18 @@ class RecordingPopup(QWidget):
 
 
     def _draw_frosted_background(self, painter):
-        """Draw a modern, clean background with proper elevation"""
-        # Main container using ratios (4% padding)
-        padding_ratio = 0.04
+        """
+        Draw glassmorphism background with blur effect and layered shadows
+        
+        Glassmorphism characteristics:
+        - High transparency (60-70%)
+        - Blur effect (background blur)
+        - Double/triple shadow layers for depth
+        - Subtle border for definition
+        - Soft gradient overlay
+        """
+        # Main container using ratios (2% padding for tighter fit)
+        padding_ratio = 0.02
         bg_rect = QRectF(
             self.width() * padding_ratio,
             self.height() * padding_ratio, 
@@ -250,31 +305,64 @@ class RecordingPopup(QWidget):
             self.height() * (1 - 2 * padding_ratio)
         )
         
-        # Softer gradient with muted tones and alpha for subtlety
+        corner_radius = min(self.width(), self.height()) * 0.06  # 6% corner radius
+        
+        # ====================================================================
+        # LAYER 1: Outer shadow (furthest, most diffuse)
+        # ====================================================================
+        painter.setBrush(QBrush(QColor(0, 0, 0, 8)))  # Very subtle
+        painter.setPen(Qt.PenStyle.NoPen)
+        outer_shadow_rect = QRectF(
+            bg_rect.x() + self.width() * 0.008,
+            bg_rect.y() + self.height() * 0.012,
+            bg_rect.width(),
+            bg_rect.height()
+        )
+        painter.drawRoundedRect(outer_shadow_rect, corner_radius, corner_radius)
+        
+        # ====================================================================
+        # LAYER 2: Mid shadow (creates depth)
+        # ====================================================================
+        painter.setBrush(QBrush(QColor(0, 0, 0, 18)))
+        mid_shadow_rect = QRectF(
+            bg_rect.x() + self.width() * 0.004,
+            bg_rect.y() + self.height() * 0.006,
+            bg_rect.width(),
+            bg_rect.height()
+        )
+        painter.drawRoundedRect(mid_shadow_rect, corner_radius, corner_radius)
+        
+        # ====================================================================
+        # LAYER 3: Inner shadow (sharp, close to surface)
+        # ====================================================================
+        painter.setBrush(QBrush(QColor(0, 0, 0, 25)))
+        inner_shadow_rect = QRectF(
+            bg_rect.x() + self.width() * 0.002,
+            bg_rect.y() + self.height() * 0.003,
+            bg_rect.width(),
+            bg_rect.height()
+        )
+        painter.drawRoundedRect(inner_shadow_rect, corner_radius, corner_radius)
+        
+        # ====================================================================
+        # MAIN SURFACE: Glassmorphism with gradient overlay
+        # ====================================================================
+        # Ultra-transparent gradient (glassmorphism signature)
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor(235, 245, 255, 240))  # Softer blue with alpha
-        gradient.setColorAt(0.5, QColor(250, 240, 255, 240))  # Muted purple
-        gradient.setColorAt(1.0, QColor(255, 235, 250, 240))  # Subtle pink
+        gradient.setColorAt(0.0, QColor(255, 255, 255, 160))  # 63% transparency
+        gradient.setColorAt(0.3, QColor(245, 250, 255, 145))  # Subtle blue tint
+        gradient.setColorAt(0.7, QColor(255, 245, 250, 145))  # Subtle pink tint
+        gradient.setColorAt(1.0, QColor(250, 250, 255, 150))  # Subtle purple
         
-        # Professional shadow with proper elevation using ratios
-        for i in range(3):
-            shadow_alpha = 15 - (i * 5)  # Layered shadows for depth
-            shadow_offset_ratio = 0.002 + (i * 0.004)  # Scale shadow offset by window size
-            shadow_rect = QRectF(
-                bg_rect.x() + self.width() * shadow_offset_ratio,
-                bg_rect.y() + self.height() * shadow_offset_ratio,
-                bg_rect.width(),
-                bg_rect.height()
-            )
-            painter.setBrush(QBrush(QColor(0, 0, 0, shadow_alpha)))
-            painter.setPen(Qt.PenStyle.NoPen)
-            corner_radius = min(self.width(), self.height()) * 0.05  # 5% of smaller dimension
-            painter.drawRoundedRect(shadow_rect, corner_radius, corner_radius)
-        
-        # Draw main background with consistent corner radius
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
-        corner_radius = min(self.width(), self.height()) * 0.05  # 5% of smaller dimension
+        painter.drawRoundedRect(bg_rect, corner_radius, corner_radius)
+        
+        # ====================================================================
+        # BORDER: Subtle white border for definition
+        # ====================================================================
+        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        painter.setPen(QPen(QColor(255, 255, 255, 100), 1.5))  # Semi-transparent white
         painter.drawRoundedRect(bg_rect, corner_radius, corner_radius)
 
     def _draw_neon_border(self, painter):
@@ -489,13 +577,32 @@ class RecordingPopup(QWidget):
 
     def _update_audio_level_internal(self, level: float):
         """
-        Internal method to update audio level (called via signal)
-
+        Internal method to update audio level with enhanced dynamics
+        
+        Applies exponential scaling to make waveform more reactive to sound:
+        - Low levels (whisper): Subtle movement
+        - Mid levels (normal speech): Clear waves
+        - High levels (loud): Dramatic peaks
+        
         Args:
             level: Audio level (0.0 to 1.0)
         """
         with self.level_lock:
-            self.current_level = max(0.0, min(1.0, level))
+            # Clamp to valid range
+            raw_level = max(0.0, min(1.0, level))
+            
+            # Apply exponential curve for better visual dynamics
+            # This makes the waveform respond more dramatically to louder sounds
+            enhanced_level = pow(raw_level, 0.6)  # Power < 1 amplifies mid-range
+            
+            # Add slight smoothing to prevent jitter
+            if hasattr(self, '_prev_level'):
+                smoothing = 0.3  # 30% of previous, 70% new
+                enhanced_level = self._prev_level * smoothing + enhanced_level * (1 - smoothing)
+            
+            self._prev_level = enhanced_level
+            self.current_level = enhanced_level
+            
             # Shift buffer and add new level
             self.audio_levels = self.audio_levels[1:] + [self.current_level]
 
