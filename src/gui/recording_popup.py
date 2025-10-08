@@ -3,7 +3,7 @@ Recording Popup GUI for Whisper Voice Recognition System
 Uses PyQt6 for proper floating window without dock icon on macOS
 """
 
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QGraphicsBlurEffect
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush, QPixmap
 from ctypes import c_void_p
@@ -91,8 +91,8 @@ class RecordingPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)  # Accept mouse events
         self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)  # Force always on top
 
-        # Set window opacity for glassmorphism effect (more transparent)
-        self.setWindowOpacity(0.85)  # 85% opacity
+        # Set window opacity for glassmorphism with backdrop blur
+        self.setWindowOpacity(0.95)  # 95% opacity to show blur effect  # 85% opacity
         
         # ====================================================================
         # CRITICAL: Enable native macOS backdrop blur (like Terminal.app)
@@ -106,6 +106,7 @@ class RecordingPopup(QWidget):
             
             # Try to enable graphite effect (blur behind window)
             import objc
+            from ctypes import c_void_p
             from Cocoa import NSVisualEffectView, NSView
             from AppKit import NSVisualEffectBlendingModeBehindWindow, NSVisualEffectMaterialHUDWindow
             
@@ -117,7 +118,7 @@ class RecordingPopup(QWidget):
             effect_view = NSVisualEffectView.alloc().initWithFrame_(ns_view.bounds())
             effect_view.setAutoresizingMask_(18)  # Flexible width and height
             effect_view.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
-            effect_view.setMaterial_(NSVisualEffectMaterialHUDWindow)  # Dark blur like HUD
+            effect_view.setMaterial_(17)  # NSVisualEffectMaterialFullScreenUI - stronger blur
             effect_view.setState_(1)  # Active state
             
             # Insert as bottom layer
@@ -275,12 +276,12 @@ class RecordingPopup(QWidget):
         )
 
         # Waveform positioning using pure ratios
-        # Waveform at 25% from top, 35% height, 80% width
+        # Waveform at 15% from top, 25% height, 80% width
         waveform_rect = QRectF(
             content_rect.x() + content_rect.width() * 0.1,  # 10% margin from sides
-            content_rect.y() + content_rect.height() * 0.25,  # 25% from top
+            content_rect.y() + content_rect.height() * 0.15,  # 15% from top
             content_rect.width() * 0.8,  # 80% of content width
-            content_rect.height() * 0.35  # 35% of content height
+            content_rect.height() * 0.25  # 25% of content height (ends at 40%)
         )
         self._draw_waveform(painter, waveform_rect)
 
@@ -292,10 +293,10 @@ class RecordingPopup(QWidget):
             time_str = "00:00"  # Fixed default format
 
         # Timer positioning using ratios
-        # Timer at 70% from top, centered horizontally
+        # Timer at 55% from top, centered horizontally
         timer_width = content_rect.width() * 0.25  # 25% of content width
         timer_height = content_rect.height() * 0.15  # 15% of content height
-        timer_y = content_rect.y() + content_rect.height() * 0.70  # 70% from top
+        timer_y = content_rect.y() + content_rect.height() * 0.55  # 55% from top
 
         # No background for timer - clean minimal look
         timer_rect = QRectF(
@@ -305,12 +306,21 @@ class RecordingPopup(QWidget):
             timer_height/2
         )
         
-        # Timer text - bold and clean
-        painter.setPen(QPen(QColor(16, 24, 32)))  # Almost black for strong contrast  # Cyan color #33C1FF
+        # Timer text with beautiful glow effect
         timer_font_size = int(self.height() * 0.08)  # 8% of window height
-        timer_font = QFont("Arial", timer_font_size, QFont.Weight.DemiBold)  # Cross-platform font  # Modern system font
-        timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2)  # Add letter spacing
+        timer_font = QFont("Arial", timer_font_size, QFont.Weight.Bold)
+        timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2)
         painter.setFont(timer_font)
+        
+        # Multi-layer glow effect for timer (minimal artist aesthetic)
+        for i in range(4, 0, -1):  # 4 layers from outer to inner
+            glow_alpha = 30 - i * 5  # Subtle glow (25, 20, 15, 10)
+            glow_offset = i * 0.8  # Minimal blur radius
+            painter.setPen(QPen(QColor(100, 160, 255, glow_alpha), glow_offset))
+            painter.drawText(timer_rect, Qt.AlignmentFlag.AlignCenter, time_str)
+        
+        # Main timer text - bright and clean
+        painter.setPen(QPen(QColor(220, 230, 240, 255)))  # Almost white with slight blue
         painter.drawText(timer_rect, Qt.AlignmentFlag.AlignCenter, time_str)
 
         # Draw microphone icon at bottom center
@@ -340,7 +350,7 @@ class RecordingPopup(QWidget):
             self.height() * (1 - 2 * padding_ratio)
         )
         
-        corner_radius = min(self.width(), self.height()) * 0.06  # 6% corner radius
+        corner_radius = min(self.width(), self.height()) * 0.15  # 15% corner radius (more rounded)
         
         # ====================================================================
         # LAYER 1: Outer shadow (furthest, most diffuse) - DARKER
@@ -383,21 +393,20 @@ class RecordingPopup(QWidget):
         # MAIN SURFACE: Rich colorful glassmorphism gradient
         # ====================================================================
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        # Vibrant colors with good saturation
-        gradient.setColorAt(0.0, QColor(180, 210, 255, 120))  # Rich blue
-        gradient.setColorAt(0.35, QColor(200, 180, 255, 115))  # Purple
-        gradient.setColorAt(0.65, QColor(255, 190, 230, 115))  # Pink
-        gradient.setColorAt(1.0, QColor(255, 220, 200, 120))   # Peachy
+        # More prominent bluish tint
+        gradient.setColorAt(0.0, QColor(50, 70, 110, 250))   # Stronger blue tint
+        gradient.setColorAt(0.5, QColor(55, 75, 115, 245))   # Mid blue
+        gradient.setColorAt(1.0, QColor(50, 70, 110, 250))   # Stronger blue tint
         
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(bg_rect, corner_radius, corner_radius)
         
         # ====================================================================
-        # BORDER: Subtle white border for definition
+        # BORDER: Stronger white border for definition on any background
         # ====================================================================
         painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        painter.setPen(QPen(QColor(255, 255, 255, 100), 1.5))  # Semi-transparent white
+        painter.setPen(QPen(QColor(255, 255, 255, 180), 2.0))  # More opaque white border
         painter.drawRoundedRect(bg_rect, corner_radius, corner_radius)
 
     def _draw_neon_border(self, painter):
@@ -484,24 +493,33 @@ class RecordingPopup(QWidget):
             # Elegant opacity gradient from center to edges
             bar_opacity = int(255 * (1.0 - distance_ratio * 0.4))  # 100% center to 60% edges
             
-            # Create gradient for each bar
-            bar_gradient = QLinearGradient(x, center_y - half_amplitude, x, center_y + half_amplitude)
-            bar_gradient.setColorAt(0.0, QColor(0, 0, 0, bar_opacity))
-            bar_gradient.setColorAt(0.5, QColor(20, 20, 20, bar_opacity))  # Slightly lighter center
-            bar_gradient.setColorAt(1.0, QColor(0, 0, 0, bar_opacity))
+            # Draw glow layers first (outer to inner)
+            for glow_layer in range(3, 0, -1):
+                glow_alpha = int(bar_opacity * (glow_layer * 0.08))  # Subtle glow
+                glow_width = bar_width * (1 + glow_layer * 0.3)
+                glow_height = half_amplitude * (1 + glow_layer * 0.15)
+                
+                glow_gradient = QLinearGradient(x, center_y - glow_height, x, center_y + glow_height)
+                glow_gradient.setColorAt(0.0, QColor(100, 160, 255, glow_alpha))
+                glow_gradient.setColorAt(0.5, QColor(120, 180, 255, int(glow_alpha * 1.2)))
+                glow_gradient.setColorAt(1.0, QColor(100, 160, 255, glow_alpha))
+                
+                painter.setBrush(QBrush(glow_gradient))
+                glow_rect = QRectF(
+                    x - (glow_width - bar_width) / 2,
+                    center_y - glow_height,
+                    glow_width,
+                    glow_height * 2
+                )
+                painter.drawRoundedRect(glow_rect, bar_width * 0.5, bar_width * 0.5)
             
-            # Draw shadow first for depth
-            shadow_rect = QRectF(
-                x + 1,  # Slight offset
-                center_y - half_amplitude + 1,
-                bar_width,
-                half_amplitude * 2
-            )
-            shadow_gradient = QLinearGradient(x, center_y - half_amplitude, x, center_y + half_amplitude)
-            shadow_gradient.setColorAt(0.0, QColor(0, 0, 0, 20))
-            shadow_gradient.setColorAt(0.5, QColor(0, 0, 0, 40))
-            shadow_gradient.setColorAt(1.0, QColor(0, 0, 0, 20))
-            painter.fillRect(shadow_rect, QBrush(shadow_gradient))
+            # Main bar gradient with light color
+            bar_gradient = QLinearGradient(x, center_y - half_amplitude, x, center_y + half_amplitude)
+            bar_gradient.setColorAt(0.0, QColor(200, 220, 240, bar_opacity))
+            bar_gradient.setColorAt(0.5, QColor(220, 235, 250, bar_opacity))  # Lighter center
+            bar_gradient.setColorAt(1.0, QColor(200, 220, 240, bar_opacity))
+            
+            # Shadow removed - using glow effect instead for minimal aesthetic
             
             # Draw main bar on top
             full_bar_rect = QRectF(
@@ -518,21 +536,21 @@ class RecordingPopup(QWidget):
 
     def _draw_microphone_icon(self, painter, content_rect):
         """Draw microphone icon at bottom center of popup"""
-        # Icon position using ratios (90% from top)
+        # Icon position using ratios (87% from top - more space from timer)
         icon_x = content_rect.center().x()
-        icon_y = content_rect.y() + content_rect.height() * 0.9
+        icon_y = content_rect.y() + content_rect.height() * 0.87
 
         # Draw microphone shape - scale based on window size
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Icon size based on content rect dimensions
-        icon_size = content_rect.height() * 0.05  # 5% of content height
+        icon_size = content_rect.height() * 0.12  # 12% of content height (more visible)
         
-        # Subtle glow using ratios
-        for i in range(2):  # Reduced glow layers for cleaner look
-            alpha = 40 - i * 20
-            glow_size = icon_size * (1 + i * 0.15)  # 15% size increase per layer
-            painter.setPen(QPen(QColor(100, 80, 120, alpha), 1))  # Purple tint to match particles
+        # Bright glow for visibility
+        for i in range(3):  # More glow layers
+            alpha = 80 - i * 25
+            glow_size = icon_size * (1 + i * 0.2)  # 20% size increase per layer
+            painter.setPen(QPen(QColor(100, 160, 255, alpha), 2))  # Blue glow
             painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
             
             # Microphone body (rounded rectangle)
@@ -544,10 +562,10 @@ class RecordingPopup(QWidget):
             )
             painter.drawRoundedRect(mic_rect, glow_size/2, glow_size/2)
 
-        # Main microphone icon with ratio-based sizing
-        icon_size = content_rect.height() * 0.05
-        painter.setPen(QPen(QColor(80, 80, 80, 180), 1.5))  # Dark gray to match waveform
-        painter.setBrush(QBrush(QColor(80, 80, 80, 80)))
+        # Main microphone icon with bright colors for visibility
+        icon_size = content_rect.height() * 0.12  # 12% (was updated earlier)
+        painter.setPen(QPen(QColor(120, 180, 255, 255), 2.5))  # Bright blue outline
+        painter.setBrush(QBrush(QColor(100, 160, 240, 200)))  # Blue fill
         
         # Microphone body
         mic_width = icon_size * 0.7
@@ -561,7 +579,7 @@ class RecordingPopup(QWidget):
         painter.drawRoundedRect(mic_rect, mic_width/2, mic_width/2)
         
         # Microphone stand
-        painter.setPen(QPen(QColor(80, 80, 80, 180), 1.5))
+        painter.setPen(QPen(QColor(120, 180, 255, 255), 2.5))  # Bright blue to match
         stand_height = icon_size * 0.3
         painter.drawLine(
             QPointF(icon_x, icon_y), 
