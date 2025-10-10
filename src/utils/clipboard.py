@@ -232,10 +232,15 @@ class TranscriptionHandler:
     
     def __init__(self, clipboard_manager: ClipboardManager):
         self.clipboard = clipboard_manager
+        
+        # Initialize text enhancement service
+        from ..services.text_enhancement_service import get_text_enhancement_service
+        self.text_enhancer = get_text_enhancement_service()
     
     def handle_transcription(self, text: str, source: str) -> bool:
         """
         Single point for ALL transcription pasting - no duplicates.
+        Applies text enhancement before pasting.
         
         Args:
             text: Transcribed text to paste
@@ -252,7 +257,13 @@ class TranscriptionHandler:
         
         print(f"📝 Processing transcription from {source}: '{text}'")
         
-        success = self.clipboard.copy_and_paste_text(text)
+        # Apply text enhancement (capitalization, punctuation, grammar)
+        enhanced_text = self.text_enhancer.enhance(text)
+        
+        if enhanced_text != text:
+            print(f"✨ Enhanced: '{enhanced_text}'")
+        
+        success = self.clipboard.copy_and_paste_text(enhanced_text)
         
         if success:
             print(f"✅ Text successfully pasted from {source}")

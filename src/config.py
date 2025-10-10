@@ -23,7 +23,7 @@ BACKEND = "realtimestt"  # Default: RealtimeSTT with whisper.cpp patch
 # - "large-v3": Most accurate but slower
 # ============================================================================
 
-MODEL_NAME = "medium"  # Used by both backends
+MODEL_NAME = "large-v3"  # Used by both backends
 
 # ============================================================================
 # SHARED SETTINGS
@@ -32,6 +32,19 @@ MODEL_NAME = "medium"  # Used by both backends
 CONFIG = {
     "model_name": MODEL_NAME,
     "language": "en",
+    
+    # ========================================================================
+    # TEXT ENHANCEMENT SETTINGS
+    # ========================================================================
+    # Post-processing for transcribed text (capitalization, punctuation, grammar)
+    # ========================================================================
+    "text_enhancement_settings": {
+        "engine": "ollama",                    # Enhancement engine: "ollama", "rules", or "disabled"
+        "ollama_model": "llama3.2:1b",         # Ollama model for enhancement (llama3.2:1b recommended for <100ms)
+        "ollama_url": "http://localhost:11434", # Ollama API endpoint
+        "max_latency_ms": 100,                 # Maximum acceptable latency for enhancement
+        "min_words_for_enhancement": 3,        # Skip enhancement for very short text (1-2 words)
+    },
     
     # ========================================================================
     # KEYBOARD (Double Command) SETTINGS
