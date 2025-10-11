@@ -146,19 +146,28 @@ class OllamaService:
     ) -> Optional[str]:
         """
         Convenience method for text enhancement (capitalization, punctuation).
-        
+
         Args:
             text: Raw text to enhance
             timeout_ms: Request timeout in milliseconds
-        
+
         Returns:
             Enhanced text or None on error
         """
-        prompt = f"""Fix punctuation and capitalization. Output ONLY the corrected text, no explanations.
+        prompt = f"""Correct the punctuation and capitalization in the following voice transcription.
 
-Input: {text}
-Output:"""
-        
+Rules:
+- Add periods, commas, question marks, and exclamation marks where appropriate
+- Capitalize the first letter of each sentence and proper nouns
+- Capitalize the pronoun "I"
+- Keep short voice commands natural (e.g., "open chrome" not "Open Chrome")
+- Preserve the conversational tone of spoken language
+- Do NOT add explanations or extra text
+
+Transcript: {text}
+
+Corrected:"""
+
         return self.generate(
             prompt=prompt,
             temperature=0.1,
