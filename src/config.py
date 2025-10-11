@@ -42,7 +42,7 @@ CONFIG = {
         "engine": "ollama",                    # Enhancement engine: "ollama", "rules", or "disabled"
         "ollama_model": "llama3.2:1b",         # Ollama model for enhancement (llama3.2:1b recommended for <100ms)
         "ollama_url": "http://localhost:11434", # Ollama API endpoint
-        "max_latency_ms": 1000,                # Maximum acceptable latency for enhancement (1 second allows long sentences)
+        "max_latency_ms": 5000,                # Maximum acceptable latency for enhancement (5 seconds allows multi-paragraph text)
         "min_words_for_enhancement": 3,        # Skip enhancement for very short text (1-2 words)
     },
 
