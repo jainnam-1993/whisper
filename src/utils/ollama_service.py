@@ -5,7 +5,6 @@ Provides a reusable interface for Ollama LLM operations across multiple use case
 
 Use Cases:
 - Text Enhancement (Whisper transcriptions)
-- Text Rephrasing (Future: replace Bedrock)
 - Other AI-powered text transformations
 """
 
@@ -154,19 +153,20 @@ class OllamaService:
         Returns:
             Enhanced text or None on error
         """
-        prompt = f"""Correct the punctuation and capitalization in the following voice transcription.
+        prompt = f"""Enhance this voice transcription by improving clarity, grammar, and word choice while preserving the exact intent.
 
 Rules:
-- Add periods, commas, question marks, and exclamation marks where appropriate
-- Capitalize the first letter of each sentence and proper nouns
-- Capitalize the pronoun "I"
-- Keep short voice commands natural (e.g., "open chrome" not "Open Chrome")
-- Preserve the conversational tone of spoken language
-- Do NOT add explanations or extra text
+- Add proper punctuation and capitalization
+- Improve word choice and sentence structure for clarity
+- Make it sound more professional and polished
+- Fix grammar and awkward phrasing
+- DO NOT change the meaning or intent of what was said
+- DO NOT add extra information or explanations
+- Keep the same overall message and conclusion
 
 Transcript: {text}
 
-Corrected:"""
+Enhanced:"""
 
         return self.generate(
             prompt=prompt,
@@ -175,34 +175,6 @@ Corrected:"""
             timeout_ms=timeout_ms
         )
     
-    def rephrase_text(
-        self,
-        text: str,
-        style: str = "professional",
-        timeout_ms: Optional[int] = None
-    ) -> Optional[str]:
-        """
-        Convenience method for text rephrasing.
-        
-        Args:
-            text: Text to rephrase
-            style: Rephrasing style (professional, casual, concise, etc.)
-            timeout_ms: Request timeout in milliseconds
-        
-        Returns:
-            Rephrased text or None on error
-        """
-        prompt = f"""Rephrase the following text in a {style} style. Output ONLY the rephrased text.
-
-Input: {text}
-Output:"""
-        
-        return self.generate(
-            prompt=prompt,
-            temperature=0.3,  # Slightly higher for creative rephrasing
-            max_tokens=500,
-            timeout_ms=timeout_ms
-        )
 
 
 # Singleton instance
