@@ -47,33 +47,7 @@ class TextEnhancementService:
                                    'what', 'when', 'where', 'why', 'how', 'who',
                                    'open', 'close', 'start', 'stop', 'create', 'delete'}
 
-        # Preload model at startup if using Ollama
-        self._ollama_ready = False
-        if self.engine == 'ollama':
-            self._warmup_ollama()
-
-    def _warmup_ollama(self):
-        """Preload Ollama model to ensure fast inference."""
-        try:
-            import requests
-            # Send a tiny warmup request to load model into memory
-            response = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json={
-                    "model": self.ollama_model,
-                    "prompt": "hi",
-                    "stream": False
-                },
-                timeout=5
-            )
-            if response.status_code == 200:
-                self._ollama_ready = True
-                print(f"[TextEnhancement] Ollama model {self.ollama_model} warmed up")
-            else:
-                print(f"[TextEnhancement] Ollama warmup failed: {response.status_code}")
-        except Exception as e:
-            print(f"[TextEnhancement] Ollama not available: {e}")
-            print("[TextEnhancement] Falling back to rule-based enhancement")
+        # No warmup here - OllamaService handles its own warmup
 
     def enhance(self, text: str) -> str:
         """
@@ -91,7 +65,7 @@ class TextEnhancementService:
         text = text.strip()
         word_count = len(text.split())
 
-        print(f"[TextEnhancement] Processing {word_count} words, engine={self.engine}, ollama_ready={self._ollama_ready}")
+        print(f"[TextEnhancement] Processing {word_count} words, engine={self.engine}")
 
         # Very short text - minimal processing
         if word_count < self.min_words_for_enhancement:
@@ -99,9 +73,9 @@ class TextEnhancementService:
             return self._process_short_text(text)
 
         # Route to appropriate engine
-        if self.engine == 'ollama' and self._ollama_ready:
+        if self.engine == 'ollama':
             return self._enhance_with_ollama(text)
-        elif self.engine == 'rules' or not self._ollama_ready:
+        elif self.engine == 'rules':
             return self._process_with_rules(text)
         else:
             return text  # No enhancement
