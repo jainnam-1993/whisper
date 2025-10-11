@@ -132,6 +132,7 @@ class RealtimeSTTCommunicator:
             return
 
         print("🛑 Stop requested - forcing immediate transcription...")
+        # Set flag FIRST to prevent race condition with background thread
         self.stop_requested = True
 
         try:
@@ -143,6 +144,7 @@ class RealtimeSTTCommunicator:
                 self.transcription_handler.handle_transcription(
                     transcription, "manual_stop"
                 )
+                print("✅ Transcription handled by stop_recording()")
             else:
                 print("No speech detected yet")
 
@@ -230,7 +232,15 @@ def main():
             sys.exit(1)
 
         try:
-            print("Starting key listener for double Command press...")
+            print("🚀 Starting Whisper voice recognition system...")
+            print("🔥 Warming up Ollama text enhancement...")
+            
+            # Warm up Ollama at startup for instant enhancement
+            from ..services.text_enhancement_service import get_text_enhancement_service
+            text_enhancer = get_text_enhancement_service()
+            print("✅ Ollama ready for text enhancement")
+
+            print("\n🎤 Starting key listener for double Command press...")
             print("Double-press Right Command to start recording")
             print("Single-press Right Command while recording to stop and transcribe")
 
