@@ -108,7 +108,7 @@ class TextEnhancementService:
 
     def _enhance_with_ollama(self, text: str) -> str:
         """
-        Enhance text using Ollama local LLM.
+        Enhance text using generic Ollama service.
 
         Args:
             text: Raw transcribed text
@@ -116,49 +116,23 @@ class TextEnhancementService:
         Returns:
             Enhanced text with proper punctuation/capitalization
         """
-        import time
-        import requests
-
-        start_time = time.time()
-
-        # Minimal prompt for speed
-        prompt = f"""Fix punctuation and capitalization. Output ONLY the corrected text, no explanations.
-
-Input: {text}
-Output:"""
-
-        try:
-            response = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json={
-                    "model": self.ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,  # Low temp for consistency
-                        "num_predict": 100,  # Limit output length
-                    }
-                },
-                timeout=self.max_latency_ms / 1000.0  # Convert to seconds
-            )
-
-            if response.status_code == 200:
-                result = response.json()
-                enhanced = result.get('response', '').strip()
-
-                latency_ms = (time.time() - start_time) * 1000
-                print(f"[TextEnhancement] Ollama latency: {latency_ms:.0f}ms")
-
-                # Basic validation - if result is garbage, fall back
-                if enhanced and len(enhanced) > len(text) * 0.5:
-                    return enhanced
-
-        except requests.Timeout:
-            print(f"[TextEnhancement] Ollama timeout (>{self.max_latency_ms}ms), falling back to rules")
-        except Exception as e:
-            print(f"[TextEnhancement] Ollama error: {e}")
-
-        # Fallback to rules
+        from ..utils.ollama_service import get_ollama_service
+        
+        # Get singleton Ollama service (with warmup)
+        ollama = get_ollama_service(
+            model=self.ollama_model,
+            url=self.ollama_url,
+            default_timeout_ms=self.max_latency_ms
+        )
+        
+        # Use convenience method for text enhancement
+        enhanced = ollama.enhance_text(text, timeout_ms=self.max_latency_ms)
+        
+        if enhanced and len(enhanced) > len(text) * 0.5:
+            return enhanced
+        
+        # Fallback to rules if Ollama fails
+        print("[TextEnhancement] Ollama returned invalid result, falling back to rules")
         return self._process_with_rules(text)
 
     def _process_short_text(self, text: str) -> str:
