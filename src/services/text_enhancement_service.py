@@ -91,8 +91,11 @@ class TextEnhancementService:
         text = text.strip()
         word_count = len(text.split())
 
+        print(f"[TextEnhancement] Processing {word_count} words, engine={self.engine}, ollama_ready={self._ollama_ready}")
+
         # Very short text - minimal processing
         if word_count < self.min_words_for_enhancement:
+            print(f"[TextEnhancement] Skipping (< {self.min_words_for_enhancement} words)")
             return self._process_short_text(text)
 
         # Route to appropriate engine

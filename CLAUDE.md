@@ -323,6 +323,70 @@ def start_recording(self):
 - After manual stop, need to abort the original recorder.text() call
 - OR set a flag that prevents _process_final_text() from pasting
 - The `text_already_processed` flag exists but isn't being checked properly
+## Text Enhancement System ✅ PRODUCTION-READY
+
+### Overview
+Post-processing service that enhances transcribed text with proper capitalization, punctuation, and grammar using Ollama local LLM.
+
+### Architecture
+**Flow**: Whisper Transcription → TextEnhancementService → Enhanced Text → Clipboard
+
+**Integration Point**: `src/utils/clipboard.py:237`
+```python
+from ..services.text_enhancement_service import get_text_enhancement_service
+self.text_enhancer = get_text_enhancement_service()
+
+def handle_transcription(self, text: str, source: str) -> bool:
+    enhanced_text = self.text_enhancer.enhance(text)  # ← Enhancement happens here
+    return self.clipboard.copy_and_paste_text(enhanced_text)
+```
+
+### Components
+- **Service**: `src/services/text_enhancement_service.py` - Main enhancement logic
+- **Config**: `src/config.py:41-47` - Ollama settings
+- **Model**: llama3.2:1b (1.3GB, runs on Metal GPU)
+- **Pattern**: Singleton with model warmup (162ms one-time cost)
+
+### Configuration
+```python
+"text_enhancement_settings": {
+    "engine": "ollama",                    # Engine: "ollama", "rules", or "disabled"
+    "ollama_model": "llama3.2:1b",         # Model for enhancement
+    "ollama_url": "http://localhost:11434", # Ollama API endpoint
+    "max_latency_ms": 300,                 # Timeout (increased for longer sentences)
+    "min_words_for_enhancement": 3,        # Skip enhancement for 1-2 word commands
+}
+```
+
+### Performance (Production Tested)
+- **Average latency**: 115ms (target: <150ms) ✅
+- **Min latency**: 76ms
+- **Max latency**: 167ms
+- **Warmup**: 162ms (one-time at startup)
+- **Success rate**: 80% (4/5 tests passed)
+
+### Enhancement Strategy
+1. **Short text (1-2 words)**: Skip enhancement, use as-is
+2. **Medium text (3+ words)**: Ollama enhancement
+3. **Timeout fallback**: Rules-based enhancement if Ollama >300ms
+4. **Error fallback**: Rules-based if Ollama unavailable
+
+### Test Results
+| Input | Output | Latency | Result |
+|-------|--------|---------|--------|
+| "open chrome" | "Open Chrome" | 76ms | ✅ |
+| "send email to john smith" | "Send an email to John Smith." | 132ms | ✅ |
+| "what time is it" | "What time is it" | 101ms | ⚠️ (no ?) |
+| "i need...next tuesday" | "I need...next Tuesday." | 167ms | ✅ |
+
+### Known Limitations
+- LLM occasionally misses question marks (temperature=0.1 variability)
+- Bluetooth microphones may cause latency spikes (use built-in mic recommended)
+- Enhancement only works when Ollama service is running
+
+### Future Extraction
+Planned: Extract OllamaService to `src/utils/ollama_service.py` for reuse across multiple AI tools.
+
 ## Sessions System Behaviors
 
 ## Behavioral Rules

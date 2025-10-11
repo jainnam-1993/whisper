@@ -32,7 +32,7 @@ MODEL_NAME = "large-v3"  # Used by both backends
 CONFIG = {
     "model_name": MODEL_NAME,
     "language": "en",
-    
+
     # ========================================================================
     # TEXT ENHANCEMENT SETTINGS
     # ========================================================================
@@ -42,10 +42,10 @@ CONFIG = {
         "engine": "ollama",                    # Enhancement engine: "ollama", "rules", or "disabled"
         "ollama_model": "llama3.2:1b",         # Ollama model for enhancement (llama3.2:1b recommended for <100ms)
         "ollama_url": "http://localhost:11434", # Ollama API endpoint
-        "max_latency_ms": 100,                 # Maximum acceptable latency for enhancement
+        "max_latency_ms": 1000,                # Maximum acceptable latency for enhancement (1 second allows long sentences)
         "min_words_for_enhancement": 3,        # Skip enhancement for very short text (1-2 words)
     },
-    
+
     # ========================================================================
     # KEYBOARD (Double Command) SETTINGS
     # ========================================================================
@@ -55,12 +55,12 @@ CONFIG = {
         "enable_realtime": False,           # No real-time transcription during recording
         "pre_buffer_duration": 3.0,         # Seconds of audio to buffer before VAD trigger
         "vad_sensitivity": 0.3,             # Voice activity detection sensitivity (0.0-1.0)
-        "post_speech_silence_duration": None,  # None = manual stop only (infinite recording)
+        "post_speech_silence_duration": None,  # None = manual stop only (press Right Command to stop)
         "webrtc_sensitivity": 2,            # Alternative VAD method sensitivity (0-3)
         "min_length_of_recording": 0.0,     # Minimum recording length in seconds
         "min_gap_between_recordings": 0.0,  # Minimum gap between recordings in seconds
     },
-    
+
     # ========================================================================
     # WAKE WORD SETTINGS
     # ========================================================================
