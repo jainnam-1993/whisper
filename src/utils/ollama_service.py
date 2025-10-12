@@ -150,20 +150,10 @@ class OllamaService:
         Returns:
             Enhanced text or None on error
         """
-        # Production prompt - minimal corrections, preserve original wording
-        prompt = f"""Correct the punctuation and capitalization in the following voice transcription.
+        # Minimal prompt for speed - Qwen models understand instructions well
+        prompt = f"""Fix capitalization, punctuation and grammar. Output only the corrected text:
 
-Rules:
-- Add periods, commas, question marks, and exclamation marks where appropriate
-- Capitalize the first letter of each sentence and proper nouns
-- Capitalize the pronoun "I"
-- Keep short voice commands natural (e.g., "open chrome" not "Open Chrome")
-- Preserve the conversational tone and word choice of spoken language
-- Do NOT add explanations or extra text
-
-Transcript: {text}
-
-Corrected:"""
+{text}"""
 
         # Limit output to 3x input length to prevent runaway generation
         input_words = len(text.split())
