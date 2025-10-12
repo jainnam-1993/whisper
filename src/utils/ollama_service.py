@@ -150,20 +150,20 @@ class OllamaService:
         Returns:
             Enhanced text or None on error
         """
-        # Production prompt - enhance clarity and professionalism while preserving intent
-        prompt = f"""Enhance this voice transcription by improving clarity, grammar, and word choice while preserving the exact intent.
+        # Production prompt - minimal corrections, preserve original wording
+        prompt = f"""Correct the punctuation and capitalization in the following voice transcription.
 
-- Add proper punctuation and capitalization
-- Improve word choice and sentence structure for clarity
-- Make it sound more professional and polished
-- Fix grammar and awkward phrasing
-- DO NOT change the meaning or intent of what was said
-- DO NOT add extra information or explanations
-- Keep the same overall message and conclusion
+Rules:
+- Add periods, commas, question marks, and exclamation marks where appropriate
+- Capitalize the first letter of each sentence and proper nouns
+- Capitalize the pronoun "I"
+- Keep short voice commands natural (e.g., "open chrome" not "Open Chrome")
+- Preserve the conversational tone and word choice of spoken language
+- Do NOT add explanations or extra text
 
 Transcript: {text}
 
-Enhanced:"""
+Corrected:"""
 
         # Limit output to 3x input length to prevent runaway generation
         input_words = len(text.split())
