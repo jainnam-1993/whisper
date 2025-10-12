@@ -65,11 +65,8 @@ class TextEnhancementService:
         text = text.strip()
         word_count = len(text.split())
 
-        print(f"[TextEnhancement] Processing {word_count} words, engine={self.engine}")
-
         # Very short text - minimal processing
         if word_count < self.min_words_for_enhancement:
-            print(f"[TextEnhancement] Skipping (< {self.min_words_for_enhancement} words)")
             return self._process_short_text(text)
 
         # Route to appropriate engine
@@ -105,8 +102,7 @@ class TextEnhancementService:
         if enhanced and len(enhanced) > len(text) * 0.5:
             return enhanced
         
-        # Fallback to rules if Ollama fails
-        print("[TextEnhancement] Ollama returned invalid result, falling back to rules")
+        # Fallback to rules if Ollama fails (silent fallback)
         return self._process_with_rules(text)
 
     def _process_short_text(self, text: str) -> str:

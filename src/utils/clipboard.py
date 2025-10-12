@@ -36,7 +36,7 @@ class ClipboardManager:
         try:
             result = subprocess.run(['pbpaste'], capture_output=True, text=True, check=True)
             self.preserved_content = result.stdout
-            print(f"Preserved clipboard content ({len(self.preserved_content)} chars)")
+
             return True
         except Exception as e:
             print(f"Warning: Could not preserve clipboard: {e}")
@@ -58,13 +58,11 @@ class ClipboardManager:
                     close_fds=True
                 )
                 process.communicate(input=self.preserved_content.encode('utf-8'))
-                print(f"✓ Restored original clipboard content ({len(self.preserved_content)} chars)")
                 return True
             except Exception as e:
                 print(f"Warning: Could not restore clipboard: {e}")
                 return False
         else:
-            print("No preserved clipboard content to restore")
             return False
     
     def copy_to_clipboard(self, text: str) -> bool:
@@ -112,7 +110,6 @@ class ClipboardManager:
             bool: True if successful, False otherwise
         """
         try:
-            print("Attempting to paste with AppleScript...")
             # Create AppleScript to paste content from clipboard
             applescript = '''
             try
@@ -130,10 +127,8 @@ class ClipboardManager:
 
             # Execute the AppleScript securely
             result = _execute_applescript_safely(applescript, timeout=5)
-            print(f"AppleScript result: stdout={result.stdout.strip()}, stderr={result.stderr.strip()}")
 
             if result.returncode == 0 and "error:" not in result.stdout:
-                print("AppleScript paste seems successful")
                 return True
             else:
                 print(f"AppleScript paste failed: {result.stderr or result.stdout}")
@@ -199,15 +194,12 @@ class ClipboardManager:
         try:
             # Copy text to clipboard
             if not self.copy_to_clipboard(text):
-                print("Failed to copy text to clipboard")
                 return False
             
-            print("Text copied to clipboard")
             time.sleep(0.5)  # Allow clipboard to settle
             
             # Paste from clipboard
             if self.paste_from_clipboard():
-                print("Text pasted successfully")
                 time.sleep(0.5)  # Allow paste to complete
                 self.restore_clipboard()
                 return True
@@ -250,34 +242,19 @@ class TranscriptionHandler:
             bool: True if pasted successfully, False otherwise
         """
         if not text or not text.strip():
-            print(f"⚠️ No text to paste from {source}")
             return False
             
         text = text.strip()
         
-        print(f"📝 Processing transcription from {source}: '{text}'")
-        
-        # First, paste the raw transcription to preserve it in clipboard history
-        # Step 1: Copy raw text to clipboard (no paste - just adds to clipboard history)
-        print(f"📋 Adding raw transcription to clipboard history...")
+        # Step 1: Copy raw text to clipboard (preserves in clipboard history)
         self.clipboard.copy_to_clipboard(text)
         time.sleep(0.1)  # Brief pause to ensure clipboard manager captures it
         
         # Step 2: Apply text enhancement (capitalization, punctuation, grammar)
         enhanced_text = self.text_enhancer.enhance(text)
         
-        if enhanced_text != text:
-            print(f"✨ Enhanced: '{text}' → '{enhanced_text}'")
-        
         # Step 3: Copy enhanced text and paste to active window
-        success = self.clipboard.copy_and_paste_text(enhanced_text)
-        
-        if success:
-            print(f"✅ Text successfully pasted from {source}")
-        else:
-            print(f"❌ Failed to paste text from {source}")
-            
-        return success
+        return self.clipboard.copy_and_paste_text(enhanced_text)
 
 
 # Legacy compatibility - keep existing imports working

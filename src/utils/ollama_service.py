@@ -123,10 +123,6 @@ class OllamaService:
             if response.status_code == 200:
                 result = response.json()
                 generated_text = result.get('response', '').strip()
-                
-                latency_ms = (time.time() - start_time) * 1000
-                print(f"[OllamaService] Generation completed in {latency_ms:.0f}ms")
-                
                 return generated_text
             else:
                 print(f"[OllamaService] Generation failed: HTTP {response.status_code}")
@@ -154,10 +150,20 @@ class OllamaService:
         Returns:
             Enhanced text or None on error
         """
-        # Minimal prompt for speed - Qwen3 models understand instructions well
-        prompt = f"""Fix capitalization, punctuation and grammar. Output only the corrected text:
+        # Production prompt - enhance clarity and professionalism while preserving intent
+        prompt = f"""Enhance this voice transcription by improving clarity, grammar, and word choice while preserving the exact intent.
 
-{text}"""
+- Add proper punctuation and capitalization
+- Improve word choice and sentence structure for clarity
+- Make it sound more professional and polished
+- Fix grammar and awkward phrasing
+- DO NOT change the meaning or intent of what was said
+- DO NOT add extra information or explanations
+- Keep the same overall message and conclusion
+
+Transcript: {text}
+
+Enhanced:"""
 
         # Limit output to 3x input length to prevent runaway generation
         input_words = len(text.split())
