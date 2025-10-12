@@ -258,19 +258,19 @@ class TranscriptionHandler:
         print(f"📝 Processing transcription from {source}: '{text}'")
         
         # First, paste the raw transcription to preserve it in clipboard history
-        print(f"📋 Pasting raw transcription to clipboard history...")
-        self.clipboard.copy_and_paste_text(text)
+        # Step 1: Copy raw text to clipboard (no paste - just adds to clipboard history)
+        print(f"📋 Adding raw transcription to clipboard history...")
+        self.clipboard.copy_to_clipboard(text)
+        time.sleep(0.1)  # Brief pause to ensure clipboard manager captures it
         
-        # Apply text enhancement (capitalization, punctuation, grammar)
+        # Step 2: Apply text enhancement (capitalization, punctuation, grammar)
         enhanced_text = self.text_enhancer.enhance(text)
         
         if enhanced_text != text:
-            print(f"✨ Enhanced: '{enhanced_text}'")
-            # Paste the enhanced version (this becomes the active clipboard content)
-            success = self.clipboard.copy_and_paste_text(enhanced_text)
-        else:
-            # Text wasn't enhanced, already pasted above
-            success = True
+            print(f"✨ Enhanced: '{text}' → '{enhanced_text}'")
+        
+        # Step 3: Copy enhanced text and paste to active window
+        success = self.clipboard.copy_and_paste_text(enhanced_text)
         
         if success:
             print(f"✅ Text successfully pasted from {source}")

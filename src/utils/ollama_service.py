@@ -52,6 +52,7 @@ class OllamaService:
         """Preload Ollama model to ensure fast inference."""
         try:
             # Send a tiny warmup request to load model into memory
+            # 30s timeout for larger models like qwen3:14b
             response = requests.post(
                 f"{self.url}/api/generate",
                 json={
@@ -59,7 +60,7 @@ class OllamaService:
                     "prompt": "hi",
                     "stream": False,
                 },
-                timeout=10.0  # 10s warmup timeout
+                timeout=30.0  # 30s warmup timeout for large models
             )
             if response.status_code == 200:
                 self.is_ready = True
@@ -153,25 +154,19 @@ class OllamaService:
         Returns:
             Enhanced text or None on error
         """
-        prompt = f"""Enhance this voice transcription by improving clarity, grammar, and word choice while preserving the exact intent.
+        # Minimal prompt for speed - Qwen3 models understand instructions well
+        prompt = f"""Fix capitalization, punctuation and grammar. Output only the corrected text:
 
-Rules:
-- Add proper punctuation and capitalization
-- Improve word choice and sentence structure for clarity
-- Make it sound more professional and polished
-- Fix grammar and awkward phrasing
-- DO NOT change the meaning or intent of what was said
-- DO NOT add extra information or explanations
-- Keep the same overall message and conclusion
+{text}"""
 
-Transcript: {text}
-
-Enhanced:"""
+        # Limit output to 3x input length to prevent runaway generation
+        input_words = len(text.split())
+        max_output_tokens = max(50, input_words * 6)  # ~3x words, 2 tokens per word
 
         return self.generate(
             prompt=prompt,
             temperature=0.1,
-            max_tokens=None,  # No limit
+            max_tokens=max_output_tokens,
             timeout_ms=timeout_ms
         )
     
@@ -189,22 +184,27 @@ def get_ollama_service(
 ) -> OllamaService:
     """
     Get or create the Ollama service singleton.
-    
+
     Args:
         model: Ollama model name
         url: Ollama API endpoint
         default_timeout_ms: Default timeout in milliseconds
         warmup: Whether to warmup model at initialization
-    
+
     Returns:
         OllamaService instance
     """
     global _ollama_service_instance
-    if _ollama_service_instance is None:
+
+    # Recreate singleton if model changed or instance doesn't exist
+    if (_ollama_service_instance is None or
+        _ollama_service_instance.model != model or
+        _ollama_service_instance.url != url):
         _ollama_service_instance = OllamaService(
             model=model,
             url=url,
             default_timeout_ms=default_timeout_ms,
             warmup=warmup
         )
+
     return _ollama_service_instance
