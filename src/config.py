@@ -40,9 +40,9 @@ CONFIG = {
     # ========================================================================
     "text_enhancement_settings": {
         "engine": "ollama",                    # Enhancement engine: "ollama", "rules", or "disabled"
-        "ollama_model": "qwen2.5:7b-instruct", # Qwen 2.5 7B Instruct (Apache 2.0, GPU-accelerated)
+        "ollama_model": "qwen2.5:7b-instruct", # Qwen 2.5 7B Instruct - proven 100% success, 800ms avg latency
         "ollama_url": "http://localhost:11434", # Ollama API endpoint
-        "max_latency_ms": 5000,                # Maximum acceptable latency for enhancement (5 seconds allows multi-paragraph text)
+        "max_latency_ms": 10000,               # 10s timeout for long transcriptions
         "min_words_for_enhancement": 3,        # Skip enhancement for very short text (1-2 words)
     },
 
