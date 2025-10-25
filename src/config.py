@@ -44,6 +44,12 @@ CONFIG = {
         "ollama_url": "http://localhost:11434", # Ollama API endpoint
         "max_latency_ms": 10000,               # 10s timeout for long transcriptions
         "min_words_for_enhancement": 3,        # Skip enhancement for very short text (1-2 words)
+        
+        # Word preferences for context-aware correction
+        "word_preferences": {
+            "oiler": "Euler",    # Always correct "oiler" to "Euler"
+            "cloud": "Claude",   # Prefer "Claude" (AI) but keep "cloud" for cloud computing context
+        },
     },
 
     # ========================================================================

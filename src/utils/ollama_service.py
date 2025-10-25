@@ -138,7 +138,8 @@ class OllamaService:
     def enhance_text(
         self,
         text: str,
-        timeout_ms: Optional[int] = None
+        timeout_ms: Optional[int] = None,
+        word_preferences: Optional[Dict[str, str]] = None
     ) -> Optional[str]:
         """
         Convenience method for text enhancement (capitalization, punctuation).
@@ -146,14 +147,22 @@ class OllamaService:
         Args:
             text: Raw text to enhance
             timeout_ms: Request timeout in milliseconds
+            word_preferences: Optional dict mapping commonly misheard words to correct forms
 
         Returns:
             Enhanced text or None on error
         """
-        # Minimal prompt for speed - Qwen models understand instructions well
-        prompt = f"""Fix capitalization, punctuation and grammar. Output only the corrected text:
-
-{text}"""
+        # Build base prompt
+        prompt_parts = ["Fix capitalization, punctuation and grammar. Output only the corrected text."]
+        
+        # Add word preferences if provided
+        if word_preferences:
+            prompt_parts.append("\nThe user frequently uses these words (speech-to-text often mishears them):")
+            for misheard, correct in word_preferences.items():
+                prompt_parts.append(f'- "{misheard}" → "{correct}"')
+        # Add text to enhance
+        prompt_parts.append(f"\nText:\n{text}")
+        prompt = "\n".join(prompt_parts)
 
         # Limit output to 3x input length to prevent runaway generation
         input_words = len(text.split())

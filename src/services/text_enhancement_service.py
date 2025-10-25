@@ -37,6 +37,9 @@ class TextEnhancementService:
 
         # Thresholds for different processing strategies
         self.min_words_for_enhancement = self.config.get('min_words_for_enhancement', 3)
+        
+        # Word preferences for context-aware correction
+        self.word_preferences = self.config.get('word_preferences', {})
 
         # Words that should always be lowercase (unless at start)
         self.lowercase_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor',
@@ -97,7 +100,11 @@ class TextEnhancementService:
         )
         
         # Use convenience method for text enhancement
-        enhanced = ollama.enhance_text(text, timeout_ms=self.max_latency_ms)
+        enhanced = ollama.enhance_text(
+            text, 
+            timeout_ms=self.max_latency_ms,
+            word_preferences=self.word_preferences
+        )
         
         if enhanced and len(enhanced) > len(text) * 0.5:
             return enhanced
