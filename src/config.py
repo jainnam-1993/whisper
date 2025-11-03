@@ -34,6 +34,20 @@ CONFIG = {
     "language": "en",
 
     # ========================================================================
+    # WHISPER VOCABULARY GROUNDING
+    # ========================================================================
+    # Provides context to Whisper model for better recognition of domain-specific terms
+    # This improves accuracy at the transcription source (better than post-processing)
+    # ========================================================================
+    "whisper_vocabulary": {
+        "initial_prompt": (
+            "This transcript may contain technical terms and proper nouns including: "
+            "Euler, Claude, AFT, AWS, Python, Docker, Kubernetes, API, GitHub, "
+            "machine learning, neural networks, and software engineering concepts."
+        )
+    },
+
+    # ========================================================================
     # TEXT ENHANCEMENT SETTINGS
     # ========================================================================
     # Post-processing for transcribed text (capitalization, punctuation, grammar)
@@ -44,12 +58,6 @@ CONFIG = {
         "ollama_url": "http://localhost:11434", # Ollama API endpoint
         "max_latency_ms": 10000,               # 10s timeout for long transcriptions
         "min_words_for_enhancement": 3,        # Skip enhancement for very short text (1-2 words)
-        
-        # Word preferences for context-aware correction
-        "word_preferences": {
-            "oiler": "Euler",    # Always correct "oiler" to "Euler"
-            "cloud": "Claude",   # Prefer "Claude" (AI) but keep "cloud" for cloud computing context
-        },
     },
 
     # ========================================================================

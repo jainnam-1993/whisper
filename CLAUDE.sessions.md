@@ -11,36 +11,7 @@ This file provides collaborative guidance and philosophy when using the Claude C
 - When working on highly standardized tasks: Provide SOTA (State of the Art) best practices
 - When working on paradigm-breaking approaches: Generate "opinion" through rigorous deductive reasoning from available evidence
 
-## Task Management
 
-### Best Practices
-- One task at a time (check .claude/state/current_task.json)
-- Update work logs as you progress  
-- Mark todos as completed immediately after finishing
-
-### Quick State Checks
-```bash
-cat .claude/state/current_task.json  # Shows current task
-git branch --show-current             # Current branch/task
-```
-
-### current_task.json Format
-
-**ALWAYS use this exact format for .claude/state/current_task.json:**
-```json
-{
-  "task": "task-name",        // Just the task name, NO path, NO .md extension
-  "branch": "feature/branch", // Git branch (NOT "branch_name")
-  "services": ["service1"],   // Array of affected services/modules
-  "updated": "2025-08-27"     // Current date in YYYY-MM-DD format
-}
-```
-
-**Common mistakes to avoid:**
-- ❌ Using `"task_file"` instead of `"task"`
-- ❌ Using `"branch_name"` instead of `"branch"`  
-- ❌ Including path like `"tasks/m-task.md"`
-- ❌ Including `.md` file extension
 
 
 ## Code Philosophy

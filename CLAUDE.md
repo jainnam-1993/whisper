@@ -343,49 +343,47 @@ def handle_transcription(self, text: str, source: str) -> bool:
 
 ### Components
 - **Service**: `src/services/text_enhancement_service.py` - Main enhancement logic
+- **Ollama Service**: `src/utils/ollama_service.py` - Generic LLM interface with singleton + token limits
 - **Config**: `src/config.py:41-47` - Ollama settings
-- **Model**: llama3.2:1b (1.3GB, runs on Metal GPU)
-- **Pattern**: Singleton with model warmup (162ms one-time cost)
+- **Model**: qwen2.5:7b-instruct (4.7GB, Metal GPU accelerated)
+- **Pattern**: Singleton with model warmup and adaptive token limits
 
-### Configuration
+### Production Configuration
 ```python
 "text_enhancement_settings": {
-    "engine": "ollama",                    # Engine: "ollama", "rules", or "disabled"
-    "ollama_model": "llama3.2:1b",         # Model for enhancement
-    "ollama_url": "http://localhost:11434", # Ollama API endpoint
-    "max_latency_ms": 300,                 # Timeout (increased for longer sentences)
-    "min_words_for_enhancement": 3,        # Skip enhancement for 1-2 word commands
+    "engine": "ollama",
+    "ollama_model": "qwen2.5:7b-instruct",  # Winner from comprehensive benchmarks
+    "ollama_url": "http://localhost:11434",
+    "max_latency_ms": 2000,                 # 2s timeout (avg 801ms + headroom)
+    "min_words_for_enhancement": 3,         # Skip 1-2 word commands
 }
 ```
 
-### Performance (Production Tested)
-- **Average latency**: 115ms (target: <150ms) ✅
-- **Min latency**: 76ms
-- **Max latency**: 167ms
-- **Warmup**: 162ms (one-time at startup)
-- **Success rate**: 80% (4/5 tests passed)
+### Performance (Comprehensive Benchmarks)
+**For detailed benchmarks, see**: `/Volumes/workplace/tools/Obsidian/01_Projects/Personal/Whisper/Implementation/Text-Enhancement-Benchmarks.md`
+
+**Summary**:
+- **Model**: qwen2.5:7b-instruct ✅ WINNER
+- **Success rate**: 100% (24/24 runs across 8 test scenarios)
+- **Average latency**: 801ms
+- **Range**: 274ms - 1185ms
+- **Memory**: 5GB VRAM on M4 Pro
+
+**Models Tested**:
+1. qwen2.5:7b-instruct - ✅ Selected (100% success, 801ms avg)
+2. qwen3:14b - ❌ Too slow (13s+ timeouts)
+3. qwen3:4b - ❌ Unreliable (75% success, 1.9x slower)
 
 ### Enhancement Strategy
 1. **Short text (1-2 words)**: Skip enhancement, use as-is
-2. **Medium text (3+ words)**: Ollama enhancement
-3. **Timeout fallback**: Rules-based enhancement if Ollama >300ms
+2. **Medium text (3+ words)**: Ollama enhancement with adaptive token limits
+3. **Timeout fallback**: Rules-based enhancement if Ollama exceeds timeout
 4. **Error fallback**: Rules-based if Ollama unavailable
 
-### Test Results
-| Input | Output | Latency | Result |
-|-------|--------|---------|--------|
-| "open chrome" | "Open Chrome" | 76ms | ✅ |
-| "send email to john smith" | "Send an email to John Smith." | 132ms | ✅ |
-| "what time is it" | "What time is it" | 101ms | ⚠️ (no ?) |
-| "i need...next tuesday" | "I need...next Tuesday." | 167ms | ✅ |
-
-### Known Limitations
-- LLM occasionally misses question marks (temperature=0.1 variability)
-- Bluetooth microphones may cause latency spikes (use built-in mic recommended)
-- Enhancement only works when Ollama service is running
-
-### Future Extraction
-Planned: Extract OllamaService to `src/utils/ollama_service.py` for reuse across multiple AI tools.
+### Technical Improvements
+1. **Singleton Fix**: Recreates service instance when model changes
+2. **Token Limits**: Prevents runaway generation (3x input length cap)
+3. **Warmup**: 30s timeout for large models, ensures GPU memory preload
 
 ## Sessions System Behaviors
 

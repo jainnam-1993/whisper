@@ -33,6 +33,9 @@ class RealtimeSTTWrapper(TranscriptionService):
         """
         super().__init__()
 
+        # Store full config for accessing whisper_vocabulary
+        self.full_config = config
+
         # Use config dict if provided, otherwise fall back to individual parameters
         if config:
             self.model_name = model
@@ -94,6 +97,11 @@ class RealtimeSTTWrapper(TranscriptionService):
 
                 pvporcupine.create = patched_create
 
+            # Get Whisper vocabulary grounding from full config
+            from ..config import CONFIG as FULL_CONFIG
+            whisper_vocab = FULL_CONFIG.get("whisper_vocabulary", {})
+            initial_prompt = whisper_vocab.get("initial_prompt", "")
+
             # Base configuration
             config = {
                 # Model configuration - same as your current setup
@@ -104,6 +112,9 @@ class RealtimeSTTWrapper(TranscriptionService):
                 "realtime_model_type": self.model_name,  # Use same model for realtime
                 "use_main_model_for_realtime": True,     # Force using main model
 
+                # Whisper vocabulary grounding (improves recognition of domain terms)
+                "initial_prompt": initial_prompt if initial_prompt else None,
+
                 # Real-time mode configuration - only enable if explicitly requested
                 "enable_realtime_transcription": self.enable_realtime,
 
@@ -111,7 +122,7 @@ class RealtimeSTTWrapper(TranscriptionService):
                 "wake_words": "jarvis" if self.wake_words else None,
                 "wakeword_backend": "pvporcupine" if self.wake_words else None,
                 "wake_words_sensitivity": self.wake_words_sensitivity,  # From CONFIG
-                "wake_word_timeout": self.wake_word_timeout,  # From CONFIG  
+                "wake_word_timeout": self.wake_word_timeout,  # From CONFIG
                 "wake_word_activation_delay": self.wake_word_activation_delay,  # From CONFIG
 
                 # Disable RealtimeSTT's console UI (we handle UI)

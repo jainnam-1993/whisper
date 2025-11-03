@@ -10,6 +10,7 @@ whisper_env/
 *.err
 *.wav
 .host_key_listener.lock
+*.lock
 
 # Cache directories
 audio_cache/
@@ -28,4 +29,13 @@ host_env/
 
 # Python cache
 __pycache__/
-*.pyc 
+*.pyc
+
+# Test/benchmark scripts (not for production)
+benchmark_*.py
+compare_*.py
+test_*.py
+final_comparison_*.py
+
+# Planning docs
+docs/ 
