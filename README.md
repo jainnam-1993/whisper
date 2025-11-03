@@ -10,12 +10,14 @@ Perfect for:
 
 ## ✨ Key Features
 
-- **🎯 Wake Word Activation**: Say "Jarvis" to start dictating (or use keyboard shortcuts)
+- **⌨️ Keyboard Activation**: Double Right Cmd to start dictating instantly
 - **🤖 AI Text Enhancement**: Automatic grammar, punctuation, and capitalization using local LLM (Qwen 2.5)
 - **🔒 100% Offline**: No data leaves your machine - complete privacy
 - **⚡ Fast**: 0.24s transcription + ~800ms enhancement = sub-second results
 - **🌍 Multilingual**: Supports 99+ languages via Whisper models
 - **📋 Auto-Paste**: Seamlessly inserts text wherever you're typing
+
+> **Note**: Wake word activation ("Jarvis") is available in the codebase but currently disabled. See `src/services/keyboard_service.py` to enable.
 
 ## 🚀 Quick Start
 
@@ -46,18 +48,52 @@ pip install -r requirements.txt
 
 ### Start Dictating
 ```bash
-# Start the service with wake word and AI enhancement
-python host_key_listener.py
+# Start the service with AI enhancement
+./bin/run.sh
+
+# Or run directly as a module:
+python -m src.services.keyboard_service
 
 # Then simply:
-# 1. Say "Jarvis" + your text, OR
-# 2. Press Right Cmd twice + your text + Right Cmd once to stop
+# Press Right Cmd twice + your text + Right Cmd once to stop
 ```
 
+> **Note**: Wake word ("Jarvis") activation is currently disabled in the code. Only the double Right Command keyboard shortcut is active.
+
 ### Grant Permissions
-On first run, grant:
-- **Accessibility**: System Settings → Privacy & Security → Accessibility → Add Python
-- **Microphone**: System Settings → Privacy & Security → Microphone → Add Python
+
+**IMPORTANT**: macOS requires permissions for the specific Python executable in your virtual environment.
+
+#### Step 1: Find Your Python Path
+```bash
+# After activating your environment, get the exact Python path:
+
+# If using Poetry:
+poetry shell
+which python
+
+# If using venv:
+source venv/bin/activate
+which python
+
+# This will show something like:
+# /Users/yourname/Library/Caches/pypoetry/virtualenvs/whisper-xyz/bin/python
+# OR
+# /path/to/whisper/venv/bin/python3
+```
+
+#### Step 2: Add Python to Accessibility
+1. Open **System Settings → Privacy & Security → Accessibility**
+2. Click the **"+"** button at the bottom
+3. Press **Cmd+Shift+G** to open "Go to folder" dialog
+4. **Paste the exact Python path** from Step 1
+5. Click "Open" and ensure the toggle is enabled
+
+#### Step 3: Add Python to Microphone
+1. Open **System Settings → Privacy & Security → Microphone**
+2. Repeat the same process with the **same Python path**
+
+> **Tip**: If the service doesn't work, verify the correct Python binary is listed in Privacy settings. It should match the output of `which python` when your environment is activated.
 
 ## 🤖 AI Text Enhancement
 
@@ -115,8 +151,10 @@ python whisper_dictation.py [OPTIONS]
 
 | Action | Shortcut |
 |--------|----------|
-| Start recording | Say "Jarvis" OR Double Right Cmd |
+| Start recording | Double Right Cmd (press twice quickly) |
 | Stop recording | Right Cmd (single press) |
+
+> **Note**: Wake word activation is currently disabled. Only keyboard shortcuts are active.
 
 ## 🔧 Service Management (Auto-Start)
 
@@ -192,7 +230,7 @@ launchctl load ~/Library/LaunchAgents/com.whisper.service.plist
 ### Recent Improvements
 
 - ✅ AI text enhancement with local LLM (~800ms avg)
-- ✅ Wake word activation ("Jarvis")
+- ✅ Whisper vocabulary grounding for better domain term recognition
 - ✅ Recording popup with waveform visualization
 - ✅ Unified transcription pattern with backdate trimming
 - ✅ Unlimited recording time (removed 30s limit)
