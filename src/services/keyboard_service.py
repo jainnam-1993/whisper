@@ -21,6 +21,7 @@ from ..config import CONFIG, BACKEND
 import time
 import traceback
 import sys
+import os
 import atexit
 from pynput import keyboard
 from ..utils.process import SingleInstanceLock, create_daemon_thread
@@ -235,30 +236,6 @@ def main():
         try:
             print("🚀 Starting Whisper voice recognition system...")
 
-            # Register cleanup for device manager on exit
-            try:
-                from ..utils.audio_device_manager import cleanup_device_manager, AudioDeviceManager
-
-                atexit.register(cleanup_device_manager)
-
-                # Start device monitoring
-                device_manager = AudioDeviceManager.get_instance()
-
-                # Simple callback: restart service on device change
-                def on_device_change_restart(device_name):
-                    print(f"🔄 Audio input changed to: {device_name}")
-                    print(f"🔄 Restarting service to use new device...")
-                    # Exit cleanly - launchctl will restart automatically
-                    sys.exit(0)
-
-                device_manager.register_callback(on_device_change_restart)
-                device_manager.start_monitoring()
-                print("✅ Device monitoring started - will restart service on device change")
-            except Exception as e:
-                print(f"⚠️ Failed to start device monitoring: {e}")
-                import traceback
-                traceback.print_exc()
-
             print("🔥 Warming up Ollama text enhancement...")
 
             # Warm up Ollama at startup for instant enhancement
@@ -278,6 +255,58 @@ def main():
             communicator = create_backend(CONFIG, backend=BACKEND)
             key_listener = DoubleCommandKeyListener(communicator, event_manager)
 
+            # Register cleanup for device manager on exit
+            try:
+                from ..utils.audio_device_manager import cleanup_device_manager, AudioDeviceManager
+
+                atexit.register(cleanup_device_manager)
+
+                # Start device monitoring
+                device_manager = AudioDeviceManager.get_instance()
+
+                # Callback: clean shutdown before restart on device change
+                def on_device_change_restart(device_name):
+                    print(f"🔄 Audio input changed to: {device_name}")
+                    print(f"🔄 Restarting service to use new device...")
+
+                    # Clean shutdown: properly stop recorder to prevent orphaned processes
+                    import time
+
+                    try:
+                        # Step 1: Shutdown recorder gracefully (lets workers exit cleanly)
+                        if hasattr(communicator, 'transcription_service'):
+                            service = communicator.transcription_service
+                            if hasattr(service, 'recorder') and service.recorder:
+                                print("🧹 Shutting down recorder...")
+                                service.recorder.shutdown()
+                                print("✅ Recorder shutdown complete")
+
+                        # Step 2: Wait for workers to exit
+                        time.sleep(1)
+                        print("🧹 Workers cleaned up")
+
+                        # Step 3: Stop keyboard listener to unblock main thread
+                        if hasattr(device_manager, '_keyboard_listener'):
+                            print("🛑 Stopping keyboard listener...")
+                            device_manager._keyboard_listener.stop()
+
+                        # Step 4: Release instance lock BEFORE exiting
+                        lock.release()
+                        print("🔓 Released instance lock")
+                    except Exception as e:
+                        print(f"⚠️ Cleanup error: {e}")
+
+                    # Use os._exit(0) now that everything is cleaned up
+                    os._exit(0)
+
+                device_manager.register_callback(on_device_change_restart)
+                device_manager.start_monitoring()
+                print("✅ Device monitoring started - will restart service on device change")
+            except Exception as e:
+                print(f"⚠️ Failed to start device monitoring: {e}")
+                import traceback
+                traceback.print_exc()
+
             # DISABLED: Wake word listener (keeping only double command for simplicity)
             # wake_word_thread = None
             # if CONFIG.get("wake_word_settings", {}).get("wake_words"):
@@ -292,6 +321,10 @@ def main():
                 on_release=key_listener.on_key_release
             )
             listener.start()
+
+            # Store listener reference for device change cleanup
+            device_manager._keyboard_listener = listener
+
             listener.join()  # Keep the script running
         finally:
             # Release the lock when exiting
