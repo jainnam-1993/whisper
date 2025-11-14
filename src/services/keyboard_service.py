@@ -21,6 +21,7 @@ from ..config import CONFIG, BACKEND
 import time
 import traceback
 import sys
+import atexit
 from pynput import keyboard
 from ..utils.process import SingleInstanceLock, create_daemon_thread
 from ..utils.recording_events import RecordingEvent
@@ -233,8 +234,33 @@ def main():
 
         try:
             print("🚀 Starting Whisper voice recognition system...")
+
+            # Register cleanup for device manager on exit
+            try:
+                from ..utils.audio_device_manager import cleanup_device_manager, AudioDeviceManager
+
+                atexit.register(cleanup_device_manager)
+
+                # Start device monitoring
+                device_manager = AudioDeviceManager.get_instance()
+
+                # Simple callback: restart service on device change
+                def on_device_change_restart(device_name):
+                    print(f"🔄 Audio input changed to: {device_name}")
+                    print(f"🔄 Restarting service to use new device...")
+                    # Exit cleanly - launchctl will restart automatically
+                    sys.exit(0)
+
+                device_manager.register_callback(on_device_change_restart)
+                device_manager.start_monitoring()
+                print("✅ Device monitoring started - will restart service on device change")
+            except Exception as e:
+                print(f"⚠️ Failed to start device monitoring: {e}")
+                import traceback
+                traceback.print_exc()
+
             print("🔥 Warming up Ollama text enhancement...")
-            
+
             # Warm up Ollama at startup for instant enhancement
             from ..services.text_enhancement_service import get_text_enhancement_service
             text_enhancer = get_text_enhancement_service()
