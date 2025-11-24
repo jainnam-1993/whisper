@@ -1,3 +1,6 @@
+# Use https://github.com/cjpais/Handy, much better and faster tool
+
+
 # 🎤 Whisper Dictation with AI Enhancement
 
 **Voice-to-text system that transcribes your speech locally and enhances it with AI-powered grammar, punctuation, and capitalization.**
